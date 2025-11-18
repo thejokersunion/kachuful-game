@@ -8,11 +8,12 @@ import { GameHeader } from 'components/GameHeader'
 import { useGameClient } from 'utils/gameClient'
 import { useResponsive, useResponsiveIconSize } from 'hooks/useResponsive'
 import type { GameState, Player, LobbyInfo } from 'types/game'
+import { KachufulGameScreen } from 'screens/kachuful/KachufulGameScreen'
 
 // Configure your PartyKit host here
 const PARTYKIT_HOST = process.env.EXPO_PUBLIC_PARTYKIT_HOST || 'localhost:1999'
 
-type ScreenMode = 'home' | 'create' | 'join' | 'lobby' | 'game'
+type ScreenMode = 'home' | 'create' | 'join' | 'lobby' | 'game' | 'kachuful'
 
 export default function LandingScreen() {
   const { isMobile } = useResponsive()
@@ -229,7 +230,8 @@ export default function LandingScreen() {
   }
 
   const handleStartGame = () => {
-    startGame()
+    // Start Kachuful game instead of generic game
+    setMode('kachuful')
   }
 
   const handleKickPlayer = (playerId: string) => {
@@ -637,6 +639,24 @@ export default function LandingScreen() {
           </YStack>
         </YStack>
       </ResponsiveContainer>
+    )
+  }
+
+  // Kachuful Game Screen
+  if (mode === 'kachuful' && gameState && currentPlayerId) {
+    const currentPlayer = gameState.players.find(p => p.id === currentPlayerId)
+    if (!currentPlayer) return null
+    
+    return (
+      <KachufulGameScreen
+        roomId={roomId}
+        playerId={currentPlayerId}
+        playerName={currentPlayer.name}
+        onLeave={() => {
+          handleLeaveLobby()
+          setMode('home')
+        }}
+      />
     )
   }
 
