@@ -1,0 +1,5 @@
+{
+  "name": "card-masters",
+  "main": "src/server.ts",
+  "compatibilityDate": "2025-11-18"
+}
