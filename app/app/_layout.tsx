@@ -1,4 +1,5 @@
 import '../tamagui-web.css'
+import '../theme-transitions.css'
 
 import { useEffect } from 'react'
 import { useColorScheme } from 'react-native'

@@ -1,0 +1,26 @@
+/* Smooth theme transitions for Web */
+:root {
+  --theme-transition-duration: 0.5s;
+  --theme-transition-timing: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* Only apply transitions when the class is present */
+body.theme-transitioning,
+body.theme-transitioning * {
+  transition: background-color var(--theme-transition-duration) var(--theme-transition-timing),
+              color var(--theme-transition-duration) var(--theme-transition-timing),
+              border-color var(--theme-transition-duration) var(--theme-transition-timing),
+              border-top-color var(--theme-transition-duration) var(--theme-transition-timing),
+              border-bottom-color var(--theme-transition-duration) var(--theme-transition-timing),
+              border-left-color var(--theme-transition-duration) var(--theme-transition-timing),
+              border-right-color var(--theme-transition-duration) var(--theme-transition-timing),
+              outline-color var(--theme-transition-duration) var(--theme-transition-timing),
+              fill var(--theme-transition-duration) var(--theme-transition-timing),
+              stroke var(--theme-transition-duration) var(--theme-transition-timing),
+              box-shadow var(--theme-transition-duration) var(--theme-transition-timing) !important;
+}
+
+/* Exclude elements that shouldn't transition or have their own animations */
+.is_Text {
+  /* Text usually inherits color, but if it has specific color, it needs transition */
+}

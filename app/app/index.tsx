@@ -454,7 +454,7 @@ export default function LandingScreen() {
     return (
       <ResponsiveContainer key="lobby" bg="$background">
         <GameHeader />
-        <YStack flex={1} px={isMobile ? '$3' : '$4'} py="$3" gap="$3">
+        <YStack flex={1} px={isMobile ? '$3' : '$4'} py="$3" gap="$3" maxWidth={800} alignSelf="center" width="100%">
           {/* Success Message */}
           {successMessage ? (
             <Card bg="$backgroundHover" borderColor="$secondary" bordered p="$3" animation="quick" enterStyle={{ opacity: 0, y: -10 }} exitStyle={{ opacity: 0, y: -10 }}>
@@ -465,175 +465,185 @@ export default function LandingScreen() {
             </Card>
           ) : null}
 
-          {/* Lobby Info Card */}
-          <Card elevate bordered bg="$backgroundStrong" p={isMobile ? '$3' : '$4'} animation="quick" enterStyle={{ opacity: 0, scale: 0.9 }} exitStyle={{ opacity: 0, scale: 0.9 }}>
-            <YStack gap="$3">
-              <XStack items="center" justify="space-between">
-                <XStack items="center" gap="$2">
-                  <Crown size={iconSizes.sm} color="$primary" />
-                  <H3 color="$primary">Lobby Info</H3>
-                </XStack>
-                <Paragraph color="$colorHover" fontSize="$2">Waiting for players...</Paragraph>
-              </XStack>
-
-              <Separator />
-
-              <XStack gap="$3" flexWrap="wrap">
-                {/* Lobby Code */}
-                <XStack flex={1} minWidth={200} items="center" justify="space-between" bg="$background" p="$2" borderRadius="$3" borderWidth={1} borderColor="$borderColor">
-                  <YStack>
-                    <Paragraph color="$colorHover" fontSize="$1" fontWeight="bold">LOBBY CODE</Paragraph>
-                    <H3 color="$primary" fontWeight="bold" letterSpacing={2}>
-                      {lobbyCode.slice(0, 3)}-{lobbyCode.slice(3)}
-                    </H3>
-                  </YStack>
-                  <Button
-                    size="$3"
-                    icon={copiedCode ? <Check size={iconSizes.sm} /> : <Copy size={iconSizes.sm} />}
-                    onPress={copyLobbyCode}
-                    bg={copiedCode ? "$secondary" : "$backgroundHover"}
-                    chromeless={!copiedCode}
-                  />
-                </XStack>
-
-                {/* Lobby Link */}
-                <XStack flex={1} minWidth={200} items="center" justify="space-between" bg="$background" p="$2" borderRadius="$3" borderWidth={1} borderColor="$borderColor">
-                   <YStack flex={1} mr="$2">
-                    <Paragraph color="$colorHover" fontSize="$1" fontWeight="bold">INVITE LINK</Paragraph>
-                    <Paragraph numberOfLines={1} ellipsizeMode="middle" color="$color" fontSize="$3">
-                      {getLobbyLink()}
-                    </Paragraph>
-                  </YStack>
-                  <Button
-                    size="$3"
-                    icon={copiedLink ? <Check size={iconSizes.sm} /> : <LinkIcon size={iconSizes.sm} />}
-                    onPress={copyLobbyLink}
-                    bg={copiedLink ? "$secondary" : "$backgroundHover"}
-                    chromeless={!copiedLink}
-                  />
-                </XStack>
-              </XStack>
-            </YStack>
-          </Card>
-
-          {/* Players List */}
-          <Card elevate bordered flex={1} bg="$backgroundStrong" overflow="hidden" p={0}>
-            <XStack items="center" justify="space-between" p="$3" bg="$background">
-              <XStack items="center" gap="$2">
-                <Users size={iconSizes.sm} color="$primary" />
-                <H3 color="$primary" fontSize="$5">Players ({gameState.players.length}/{gameState.maxPlayers})</H3>
-              </XStack>
-              {isHost && (
-                <Card bg="$accent" px="$2" py="$1" borderRadius="$10">
-                  <Paragraph color="white" fontSize="$1" fontWeight="bold">YOU ARE HOST</Paragraph>
-                </Card>
-              )}
-            </XStack>
+          {/* Main Lobby Content - Split for Desktop, Stack for Mobile */}
+          <YStack gap="$3" flex={1}>
             
-            <Separator />
-
-            <ScrollView flex={1} showsVerticalScrollIndicator={false}>
-              <YStack>
-                {gameState.players.map((player: Player, index: number) => (
-                  <XStack 
-                    key={player.id} 
-                    items="center" 
-                    justify="space-between" 
-                    p="$3" 
-                    bg={player.id === currentPlayerId ? "$backgroundHover" : "transparent"}
-                    borderBottomWidth={1}
-                    borderColor="$borderColor"
-                    animation="quick"
-                    enterStyle={{ opacity: 0, x: -10 }}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <XStack items="center" gap="$3" flex={1}>
-                      <Circle size="$3" bg={player.isHost ? "$accent" : "$primary"} elevation="$1">
-                         {player.isHost ? <Crown size={16} color="white" /> : <Users size={16} color="white" />}
-                      </Circle>
-                      <YStack flex={1}>
-                        <XStack items="center" gap="$2">
-                          <Paragraph fontWeight="bold" color="$color">{player.name}</Paragraph>
-                          {player.id === currentPlayerId && (
-                            <Paragraph color="$colorHover" fontSize="$1">(You)</Paragraph>
-                          )}
-                        </XStack>
-                        <Paragraph color={player.status === 'connected' ? "$success" : "$warning"} fontSize="$1">
-                          {player.status}
-                        </Paragraph>
-                      </YStack>
-                    </XStack>
-                    
-                    {isHost && !player.isHost && (
-                      <Button
-                        size="$2"
-                        icon={<UserX size={14} />}
-                        onPress={() => handleKickPlayer(player.id)}
-                        bg="$error"
-                        chromeless
-                        hoverStyle={{ bg: "$error", color: "white" }}
-                      />
-                    )}
-                    {player.isHost && !isHost && (
-                       <Crown size={16} color="$accent" />
-                    )}
-                  </XStack>
-                ))}
-              </YStack>
-            </ScrollView>
-          </Card>
-
-          {/* Action Buttons */}
-          <YStack gap="$3" pt="$2">
-            {isHost ? (
-              <XStack gap="$3">
-                <Button
-                  flex={1}
-                  size={isMobile ? '$4' : '$5'}
-                  bg="$background"
-                  borderColor="$error"
-                  borderWidth={1}
-                  color="$error"
-                  icon={<LogOut size={iconSizes.sm} />}
-                  onPress={handleLeaveLobby}
-                  pressStyle={{ bg: "$error", color: "white" }}
-                >
-                  Leave
-                </Button>
-                <Button
-                  flex={2}
-                  size={isMobile ? '$4' : '$5'}
-                  bg="$accent"
-                  icon={<Play size={iconSizes.md} />}
-                  onPress={handleStartGame}
-                  disabled={!canStartGame}
-                  opacity={!canStartGame ? 0.5 : 1}
-                  pressStyle={{ scale: 0.98 }}
-                >
-                  Start Game
-                </Button>
-              </XStack>
-            ) : (
+            {/* Top Section: Code & Info */}
+            <Card elevate bordered bg="$primary" p="$3" animation="bouncy" enterStyle={{ opacity: 0, scale: 0.95, y: 10 }}>
               <YStack gap="$3">
-                <Card bg="$backgroundHover" p="$3" bordered borderColor="$primary" animation="quick">
-                  <XStack items="center" gap="$3" justify="center">
-                    <Spinner size="small" color="$primary" />
-                    <Paragraph color="$primary" fontWeight="bold">Waiting for host to start...</Paragraph>
+                <XStack items="center" justify="space-between">
+                  <XStack items="center" gap="$2">
+                    <Crown size={20} color="$accent" />
+                    <H3 color="white" fontWeight="800" fontSize="$5">Game Lobby</H3>
                   </XStack>
-                </Card>
-                <Button
-                  size="$4"
-                  bg="$background"
-                  borderColor="$error"
-                  borderWidth={1}
-                  color="$error"
-                  icon={<LogOut size={iconSizes.sm} />}
-                  onPress={handleLeaveLobby}
-                >
-                  Leave Lobby
-                </Button>
+                  <Card bg="rgba(0,0,0,0.2)" px="$2" py="$1" borderRadius="$4">
+                     <Paragraph color="white" opacity={0.9} fontSize={10} fontWeight="bold" letterSpacing={0.5}>WAITING FOR PLAYERS</Paragraph>
+                  </Card>
+                </XStack>
+
+                <XStack gap="$2" flexWrap="wrap">
+                  {/* Code Box */}
+                  <XStack flex={1} minWidth={140} bg="rgba(0,0,0,0.2)" p="$2" borderRadius="$3" items="center" justify="space-between" borderWidth={1} borderColor="rgba(255,255,255,0.1)">
+                    <YStack>
+                      <Paragraph color="white" opacity={0.6} fontSize={9} fontWeight="bold" letterSpacing={1}>CODE</Paragraph>
+                      <H2 color="$accent" fontWeight="900" letterSpacing={1} fontSize="$6">{lobbyCode.slice(0, 3)}-{lobbyCode.slice(3)}</H2>
+                    </YStack>
+                    <Button
+                      size="$2"
+                      icon={copiedCode ? <Check size={14} color="$success" /> : <Copy size={14} color="white" />}
+                      onPress={copyLobbyCode}
+                      bg="rgba(255,255,255,0.1)"
+                      hoverStyle={{ bg: "rgba(255,255,255,0.2)" }}
+                      pressStyle={{ bg: "rgba(255,255,255,0.05)" }}
+                    />
+                  </XStack>
+
+                  {/* Link Box */}
+                  <XStack flex={1} minWidth={140} bg="rgba(0,0,0,0.2)" p="$2" borderRadius="$3" items="center" justify="space-between" borderWidth={1} borderColor="rgba(255,255,255,0.1)">
+                    <YStack flex={1} mr="$2">
+                      <Paragraph color="white" opacity={0.6} fontSize={9} fontWeight="bold" letterSpacing={1}>INVITE LINK</Paragraph>
+                      <Paragraph numberOfLines={1} ellipsizeMode="middle" color="white" fontSize="$3" opacity={0.9}>
+                        {getLobbyLink()}
+                      </Paragraph>
+                    </YStack>
+                    <Button
+                      size="$2"
+                      icon={copiedLink ? <Check size={14} color="$success" /> : <LinkIcon size={14} color="white" />}
+                      onPress={copyLobbyLink}
+                      bg="rgba(255,255,255,0.1)"
+                      hoverStyle={{ bg: "rgba(255,255,255,0.2)" }}
+                      pressStyle={{ bg: "rgba(255,255,255,0.05)" }}
+                    />
+                  </XStack>
+                </XStack>
               </YStack>
-            )}
+            </Card>
+
+            {/* Players List */}
+            <Card elevate bordered flex={1} bg="$backgroundStrong" overflow="hidden" p={0} animation="lazy" enterStyle={{ opacity: 0, y: 20 }}>
+              <XStack items="center" justify="space-between" px="$3" py="$2" bg="$background" borderBottomWidth={1} borderColor="$borderColor">
+                <XStack items="center" gap="$2">
+                  <Users size={18} color="$primary" />
+                  <Paragraph color="$color" fontWeight="bold" fontSize="$4">Players</Paragraph>
+                  <Card bg="$primary" px="$2" py="$1" borderRadius="$4">
+                    <Paragraph color="white" fontSize={10} fontWeight="bold">{gameState.players.length}/{gameState.maxPlayers}</Paragraph>
+                  </Card>
+                </XStack>
+                {isHost && (
+                  <Card bg="$accent" px="$2" py="$1" borderRadius="$4">
+                    <Paragraph color="$backgroundStrong" fontSize={10} fontWeight="900">HOST</Paragraph>
+                  </Card>
+                )}
+              </XStack>
+              
+              <ScrollView flex={1} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 8 }}>
+                <YStack gap="$2">
+                  {gameState.players.map((player: Player, index: number) => (
+                    <XStack 
+                      key={player.id} 
+                      items="center" 
+                      justify="space-between" 
+                      p="$2" 
+                      bg={player.id === currentPlayerId ? "$primary" : "$background"}
+                      borderRadius="$3"
+                      borderWidth={1}
+                      borderColor={player.id === currentPlayerId ? "$primary" : "$borderColor"}
+                      animation="bouncy"
+                      enterStyle={{ opacity: 0, x: -20, scale: 0.9 }}
+                      style={{ animationDelay: `${index * 50}ms` }}
+                      pressStyle={{ scale: 0.99 }}
+                    >
+                      <XStack items="center" gap="$3" flex={1}>
+                        <Circle size="$3" bg={player.isHost ? "$accent" : (player.id === currentPlayerId ? "white" : "$backgroundHover")} borderWidth={1} borderColor="$borderColor">
+                           {player.isHost ? <Crown size={14} color={player.id === currentPlayerId ? "$primary" : "$color"} /> : <Users size={14} color={player.id === currentPlayerId ? "$primary" : "$color"} />}
+                        </Circle>
+                        <YStack flex={1}>
+                          <XStack items="center" gap="$2">
+                            <Paragraph fontWeight="bold" color={player.id === currentPlayerId ? "white" : "$color"} fontSize="$3">{player.name}</Paragraph>
+                            {player.id === currentPlayerId && (
+                              <Paragraph color="white" opacity={0.8} fontSize={10}>(You)</Paragraph>
+                            )}
+                          </XStack>
+                        </YStack>
+                      </XStack>
+                      
+                      <XStack items="center" gap="$2">
+                        <Circle size={8} bg={player.status === 'connected' ? "$success" : "$warning"} />
+                        {isHost && !player.isHost && (
+                          <Button
+                            size="$2"
+                            icon={<UserX size={12} />}
+                            onPress={() => handleKickPlayer(player.id)}
+                            bg="$error"
+                            chromeless={player.id !== currentPlayerId}
+                            color={player.id === currentPlayerId ? "white" : "$error"}
+                            hoverStyle={{ bg: "$error", color: "white" }}
+                          />
+                        )}
+                      </XStack>
+                    </XStack>
+                  ))}
+                </YStack>
+              </ScrollView>
+            </Card>
+
+            {/* Action Buttons */}
+            <YStack gap="$3" pt="$2">
+              {isHost ? (
+                <XStack gap="$3">
+                  <Button
+                    flex={1}
+                    size="$4"
+                    bg="$background"
+                    borderColor="$error"
+                    borderWidth={1}
+                    color="$error"
+                    icon={<LogOut size={16} />}
+                    onPress={handleLeaveLobby}
+                    pressStyle={{ bg: "$error", color: "white" }}
+                    animation="bouncy"
+                  >
+                    Leave
+                  </Button>
+                  <Button
+                    flex={2}
+                    size="$4"
+                    bg="$accent"
+                    color="$backgroundStrong"
+                    icon={<Play size={16} color="$backgroundStrong" />}
+                    onPress={handleStartGame}
+                    disabled={!canStartGame}
+                    opacity={!canStartGame ? 0.5 : 1}
+                    pressStyle={{ scale: 0.97 }}
+                    hoverStyle={{ scale: 1.02 }}
+                    animation="bouncy"
+                    fontWeight="bold"
+                  >
+                    Start Game
+                  </Button>
+                </XStack>
+              ) : (
+                <YStack gap="$3">
+                  <Card bg="$backgroundHover" p="$3" bordered borderColor="$primary" animation="quick">
+                    <XStack items="center" gap="$3" justify="center">
+                      <Spinner size="small" color="$primary" />
+                      <Paragraph color="$primary" fontWeight="bold">Waiting for host to start...</Paragraph>
+                    </XStack>
+                  </Card>
+                  <Button
+                    size="$4"
+                    bg="$background"
+                    borderColor="$error"
+                    borderWidth={1}
+                    color="$error"
+                    icon={<LogOut size={16} />}
+                    onPress={handleLeaveLobby}
+                  >
+                    Leave Lobby
+                  </Button>
+                </YStack>
+              )}
+            </YStack>
           </YStack>
         </YStack>
       </ResponsiveContainer>

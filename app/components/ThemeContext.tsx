@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import { useColorScheme } from 'react-native'
+import { useColorScheme, Platform } from 'react-native'
 
 type Theme = 'light' | 'dark'
 
@@ -21,6 +21,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setTheme(systemColorScheme)
     }
   }, [systemColorScheme])
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      // Add transition class to body
+      document.body.classList.add('theme-transitioning')
+      
+      // Remove class after transition completes
+      const timeout = setTimeout(() => {
+        document.body.classList.remove('theme-transitioning')
+      }, 500) // Match CSS duration
+
+      return () => clearTimeout(timeout)
+    }
+  }, [theme])
 
   const toggleTheme = () => {
     setTheme((current) => (current === 'light' ? 'dark' : 'light'))
