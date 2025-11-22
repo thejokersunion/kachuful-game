@@ -364,9 +364,10 @@ export default function GameTable({
       (!playableSet || playableSet.has(selectedCardId))
   )
 
-  const handlePlay = () => {
-    if (!selectedCardId) return
-    onPlayCard?.(selectedCardId)
+  const handlePlay = (cardId?: string) => {
+    const playId = cardId ?? selectedCardId
+    if (!playId) return
+    onPlayCard?.(playId)
     setSelectedCards(new Set())
   }
 
@@ -534,6 +535,8 @@ export default function GameTable({
           cards={displayedHand}
           selectedCards={selectedCards}
           onToggle={toggleCardSelection}
+          onPlaySelected={handlePlay}
+          canPlaySelected={canPlayCard}
           cardSize={cardSize}
           bottomOffset={handBottomOffset}
           isInteractive={isHandInteractive}

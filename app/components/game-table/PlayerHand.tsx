@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { Animated } from 'react-native'
-import { XStack } from 'tamagui'
+import { Button, XStack, YStack } from 'tamagui'
+import { Sword } from '@tamagui/lucide-icons'
 import type { PlayingCard } from './types'
 import type { GameCardSize } from './GameCard'
 import { GameCard } from './GameCard'
@@ -12,9 +13,26 @@ interface PlayerHandProps {
   cardSize: GameCardSize
   bottomOffset?: number
   isInteractive?: boolean
+  onPlaySelected?: (cardId: string) => void
+  canPlaySelected?: boolean
 }
 
-function Component({ cards, selectedCards, onToggle, cardSize, bottomOffset = 10, isInteractive = true }: PlayerHandProps) {
+const overlayOffset: Record<GameCardSize, number> = {
+  small: 38,
+  normal: 48,
+  large: 58,
+}
+
+function Component({
+  cards,
+  selectedCards,
+  onToggle,
+  cardSize,
+  bottomOffset = 10,
+  isInteractive = true,
+  onPlaySelected,
+  canPlaySelected = true,
+}: PlayerHandProps) {
   const activation = useRef(new Animated.Value(isInteractive ? 1 : 0)).current
 
   useEffect(() => {
@@ -54,16 +72,47 @@ function Component({ cards, selectedCards, onToggle, cardSize, bottomOffset = 10
         transform: 'translateX(-50%)',
       }}
     >
-      {cards.map((card, index) => (
-        <Animated.View key={card.id} style={cardStyles[index]}>
-          <GameCard
-            card={card}
-            selected={selectedCards.has(card.id)}
-            onPress={() => onToggle(card.id)}
-            size={cardSize}
-          />
-        </Animated.View>
-      ))}
+      {cards.map((card, index) => {
+        const isSelected = selectedCards.has(card.id)
+        return (
+          <Animated.View key={card.id} style={cardStyles[index]}>
+            <YStack position="relative" ai="center">
+              <GameCard
+                card={card}
+                selected={isSelected}
+                onPress={() => onToggle(card.id)}
+                size={cardSize}
+              />
+              {isSelected && isInteractive ? (
+                <XStack
+                  position="absolute"
+                  top={-overlayOffset[cardSize]}
+                  shadowColor="#000"
+                  shadowOpacity={0.35}
+                  shadowRadius={10}
+                  shadowOffset={{ width: 0, height: 4 }}
+                >
+                  <Button
+                    size="$3"
+                    bg={canPlaySelected ? '$accent' : 'rgba(255,255,255,0.08)'}
+                    color={canPlaySelected ? '$background' : 'rgba(255,255,255,0.6)'}
+                    icon={<Sword size={16} />}
+                    disabled={!canPlaySelected}
+                    opacity={canPlaySelected ? 1 : 0.6}
+                    onPress={() => {
+                      if (!canPlaySelected) return
+                      onPlaySelected?.(card.id)
+                    }}
+                    pressStyle={{ scale: 0.94 }}
+                  >
+                    Play
+                  </Button>
+                </XStack>
+              ) : null}
+            </YStack>
+          </Animated.View>
+        )
+      })}
     </XStack>
   )
 }
