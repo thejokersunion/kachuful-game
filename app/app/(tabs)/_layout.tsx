@@ -4,20 +4,26 @@ import { Atom, AudioWaveform } from '@tamagui/lucide-icons'
 
 export default function TabLayout() {
   const theme = useTheme()
+  const palette = {
+    primary: theme?.primary?.val ?? '#6B46C1',
+    background: theme?.background?.val ?? '#0F172A',
+    border: theme?.borderColor?.val ?? '#1F2937',
+    text: theme?.color?.val ?? '#F1F5F9',
+  }
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: theme.primary.val,
+        tabBarActiveTintColor: palette.primary,
         tabBarStyle: {
-          backgroundColor: theme.background.val,
-          borderTopColor: theme.borderColor.val,
+          backgroundColor: palette.background,
+          borderTopColor: palette.border,
         },
         headerStyle: {
-          backgroundColor: theme.background.val,
-          borderBottomColor: theme.borderColor.val,
+          backgroundColor: palette.background,
+          borderBottomColor: palette.border,
         },
-        headerTintColor: theme.color.val,
+        headerTintColor: palette.text,
       }}
     >
       <Tabs.Screen

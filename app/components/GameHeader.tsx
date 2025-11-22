@@ -14,8 +14,8 @@ export function GameHeader() {
       bg="$background"
       px={isMobile ? '$3' : '$4'}
       py={isMobile ? '$2' : '$3'}
-      items="center"
-      justify="space-between"
+      alignItems="center"
+      justifyContent="space-between"
       borderBottomWidth={1}
       borderBottomColor="$borderColor"
     >

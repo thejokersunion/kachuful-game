@@ -54,6 +54,7 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
 function RootLayoutNav() {
   const colorScheme = useColorScheme()
   const theme = useTheme()
+  const modalBackground = theme?.background?.val ?? '#0F172A'
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
@@ -62,6 +63,14 @@ function RootLayoutNav() {
           name="index"
           options={{
             headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="game-table"
+          options={{
+            headerShown: false,
+            animation: 'fade',
           }}
         />
 
@@ -81,7 +90,7 @@ function RootLayoutNav() {
             gestureEnabled: true,
             gestureDirection: 'horizontal',
             contentStyle: {
-              backgroundColor: theme.background.val,
+                backgroundColor: modalBackground,
             },
           }}
         />

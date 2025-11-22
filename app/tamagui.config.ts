@@ -1,5 +1,7 @@
 import { createTamagui } from 'tamagui'
 import { defaultConfig } from '@tamagui/config/v4'
+import { createAnimations } from '@tamagui/animations-react-native'
+import { shorthands } from '@tamagui/shorthands'
 
 // Psychologically designed gaming colors - elegant, addictive, premium feel
 const gamingColors = {
@@ -43,8 +45,35 @@ const gamingColors = {
   white: '#FFFFFF',
 }
 
+const animations = createAnimations({
+  medium: {
+    type: 'spring',
+    damping: 18,
+    mass: 1,
+    stiffness: 220,
+  },
+  bouncy: {
+    type: 'spring',
+    damping: 10,
+    mass: 0.9,
+    stiffness: 180,
+  },
+  lazy: {
+    type: 'spring',
+    damping: 25,
+    mass: 1,
+    stiffness: 120,
+  },
+})
+
 export const config = createTamagui({
   ...defaultConfig,
+  animations,
+  shorthands,
+  settings: {
+    ...defaultConfig.settings,
+    onlyAllowShorthands: false,
+  },
   themes: {
     light: {
       background: gamingColors.pearl,
