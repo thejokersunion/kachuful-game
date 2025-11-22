@@ -16,6 +16,7 @@ const rotationByDirection: Record<PlayerDirection, string> = {
   bottom: '0deg',
   left: '-5deg',
   right: '5deg',
+  trump: '-45deg',
 }
 
 function Component({ direction, origin, target, isMobile }: CardFlightProps) {

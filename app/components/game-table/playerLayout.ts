@@ -1,4 +1,6 @@
-export type PlayerDirection = 'top' | 'left' | 'right' | 'bottom'
+import type { Point2D } from './animationTargets'
+
+export type PlayerDirection = 'top' | 'left' | 'right' | 'bottom' | 'trump'
 
 const getPadding = (isMobile: boolean) => (isMobile ? 16 : 28)
 const getBadgeDimensions = (isMobile: boolean) => ({
@@ -119,7 +121,7 @@ export const getPlayerTargetPoint = (
   width: number,
   height: number,
   isMobile: boolean
-) => {
+): Point2D => {
   const safeWidth = width || 1
   const safeHeight = height || 1
   const padding = getPadding(isMobile)
@@ -189,4 +191,23 @@ export const getPlayerTargetPoint = (
   const spacing = safeHeight / Math.max(rightCount + 1, 2)
   const y = spacing * (rightIndex + 1)
   return { x: rightX, y: clamp(y, halfHeight, safeHeight - halfHeight) }
+}
+
+export const getTrumpTargetPoint = (
+  width: number,
+  height: number,
+  isMobile: boolean
+): Point2D => {
+  const safeWidth = width || 1
+  const safeHeight = height || 1
+  const cardWidth = isMobile ? 90 : 120
+  const cardHeight = isMobile ? 126 : 168
+  const halfCardWidth = cardWidth / 2
+  const halfCardHeight = cardHeight / 2
+  const margin = isMobile ? 6 : 10
+
+  return {
+    x: clamp(safeWidth - margin - halfCardWidth, halfCardWidth, safeWidth - halfCardWidth),
+    y: clamp(safeHeight - margin - halfCardHeight, halfCardHeight, safeHeight - halfCardHeight),
+  }
 }

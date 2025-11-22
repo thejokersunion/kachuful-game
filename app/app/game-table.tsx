@@ -10,7 +10,7 @@ import { PlayerBadge } from '../components/game-table/PlayerBadge'
 import { PlayerHand } from '../components/game-table/PlayerHand'
 import { TrumpCardSpotlight } from '../components/game-table/TrumpCardSpotlight'
 import { getDeckOrigin, type Point2D } from '../components/game-table/animationTargets'
-import { getPlayerDirection, getPlayerPosition, getPlayerTargetPoint, type PlayerDirection } from '../components/game-table/playerLayout'
+import { getPlayerDirection, getPlayerPosition, getPlayerTargetPoint, getTrumpTargetPoint, type PlayerDirection } from '../components/game-table/playerLayout'
 import type { PlayingCard, TablePlayer } from '../components/game-table/types'
 import type { GameCardSize } from '../components/game-table/GameCard'
 
@@ -53,6 +53,7 @@ export default function GameTable() {
   const [dealtCounts, setDealtCounts] = useState<Record<string, number>>(() =>
     players.reduce((acc, player) => ({ ...acc, [player.id]: 0 }), {})
   )
+  const [isTrumpRevealed, setIsTrumpRevealed] = useState(false)
   type ActiveFlight = {
     id: string
     playerId: string
@@ -89,6 +90,7 @@ export default function GameTable() {
   )
 
   const deckOrigin = useMemo(() => getDeckOrigin(width, height), [width, height])
+  const trumpTarget = useMemo(() => getTrumpTargetPoint(width, height, isMobile), [width, height, isMobile])
 
   const playerTargets = useMemo<Record<string, Point2D>>(
     () =>
@@ -100,16 +102,45 @@ export default function GameTable() {
   )
 
   useEffect(() => {
+    setIsTrumpRevealed(false)
     const totalDeals = players.length * 5
     const travelDuration = isMobile ? 360 : 440
     let cancelled = false
     let flightTimer: ReturnType<typeof setTimeout> | null = null
     let delayTimer: ReturnType<typeof setTimeout> | null = null
     let dealIndex = 0
+    let trumpFlightStarted = false
+
+    const startTrumpFlight = () => {
+      if (cancelled || trumpFlightStarted) return
+      trumpFlightStarted = true
+      const dealId = 'trump-flight'
+      setActiveFlights((prev) => [
+        ...prev.filter((flight) => flight.id !== dealId),
+        {
+          id: dealId,
+          playerId: 'TRUMP',
+          direction: 'trump',
+          target: trumpTarget,
+        },
+      ])
+
+      flightTimer = setTimeout(() => {
+        if (cancelled) {
+          return
+        }
+        setActiveFlights((prev) => prev.filter((flight) => flight.id !== dealId))
+        setIsTrumpRevealed(true)
+      }, travelDuration)
+    }
 
     const tick = () => {
-      if (cancelled || dealIndex >= totalDeals) {
-        setActiveFlights([])
+      if (cancelled) {
+        return
+      }
+
+      if (dealIndex >= totalDeals) {
+        startTrumpFlight()
         return
       }
 
@@ -140,9 +171,10 @@ export default function GameTable() {
       cancelled = true
       if (flightTimer) clearTimeout(flightTimer)
       if (delayTimer) clearTimeout(delayTimer)
+      setIsTrumpRevealed(false)
       setActiveFlights([])
     }
-  }, [players, playerDirections, playerTargets, deckOrigin, isMobile])
+  }, [players, playerDirections, playerTargets, deckOrigin, isMobile, trumpTarget])
 
   const visibleHandCount = Math.min(playerHand.length, dealtCounts[currentPlayer.id] ?? 0)
   const visibleHand = useMemo(() => playerHand.slice(0, visibleHandCount), [playerHand, visibleHandCount])
@@ -155,9 +187,10 @@ export default function GameTable() {
     })
   }, [visibleHand])
 
-  const totalDealsNeeded = players.length * 5
+  const totalDealsNeeded = players.length * 5 + 1
   const totalDealt = players.reduce((sum, player) => sum + (dealtCounts[player.id] ?? 0), 0)
-  const remainingCards = Math.max(totalDealsNeeded - totalDealt - activeFlights.length, 0)
+  const dealtWithTrump = totalDealt + (isTrumpRevealed ? 1 : 0)
+  const remainingCards = Math.max(totalDealsNeeded - dealtWithTrump - activeFlights.length, 0)
 
   return (
     <ResponsiveContainer bg="$background" overflow="hidden">
@@ -227,7 +260,12 @@ export default function GameTable() {
           bottomOffset={isMobile ? 10 : 15}
         />
 
-        <TrumpCardSpotlight card={trumpCard} isMobile={isMobile} />
+        <TrumpCardSpotlight
+          card={trumpCard}
+          isMobile={isMobile}
+          position={trumpTarget}
+          isVisible={isTrumpRevealed}
+        />
       </Stack>
     </ResponsiveContainer>
   )
