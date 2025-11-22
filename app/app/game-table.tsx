@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Stack, XStack, YStack } from 'tamagui'
+import { Button, Paragraph, Stack, XStack, YStack } from 'tamagui'
 import { useResponsive } from '../hooks/useResponsive'
 import { ResponsiveContainer } from '../components/ResponsiveContainer'
 import { CardFlight } from '../components/game-table/CardFlight'
@@ -14,10 +14,17 @@ import { getPlayerDirection, getPlayerPosition, getPlayerTargetPoint, getTrumpTa
 import type { PlayingCard, TablePlayer } from '../components/game-table/types'
 import type { GameCardSize } from '../components/game-table/GameCard'
 
-export default function GameTable() {
+interface GameTableProps {
+  players?: TablePlayer[]
+  playerCount?: number
+  maxPlayers?: number
+  onLeaveGame?: () => void
+}
+
+export default function GameTable({ players: providedPlayers, playerCount, maxPlayers, onLeaveGame }: GameTableProps = {}) {
   const { width, height, isMobile, isTablet } = useResponsive()
 
-  const players = useMemo<TablePlayer[]>(
+  const defaultPlayers = useMemo<TablePlayer[]>(
     () => [
       { id: '1', displayName: 'GUEST001', coins: 3_500_000, avatar: '🎮', isCurrentTurn: true },
       { id: '2', displayName: 'GUEST689', coins: 5_500_000, avatar: '👨', isCurrentTurn: false },
@@ -27,6 +34,8 @@ export default function GameTable() {
     ],
     []
   )
+
+  const tablePlayers = providedPlayers && providedPlayers.length > 0 ? providedPlayers : defaultPlayers
 
   const playerHand = useMemo<PlayingCard[]>(
     () => [
@@ -50,9 +59,7 @@ export default function GameTable() {
 
   const trumpCard = useMemo<PlayingCard>(() => ({ suit: '♠', rank: 'A', id: 'trump' }), [])
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set())
-  const [dealtCounts, setDealtCounts] = useState<Record<string, number>>(() =>
-    players.reduce((acc, player) => ({ ...acc, [player.id]: 0 }), {})
-  )
+  const [dealtCounts, setDealtCounts] = useState<Record<string, number>>({})
   const [isTrumpRevealed, setIsTrumpRevealed] = useState(false)
   type ActiveFlight = {
     id: string
@@ -77,16 +84,16 @@ export default function GameTable() {
 
   const cardSize: GameCardSize = isMobile ? 'normal' : isTablet ? 'normal' : 'large'
 
-  const currentPlayer = players[0]
-  const otherPlayers = players.slice(1)
+  const currentPlayer = tablePlayers[0]
+  const otherPlayers = currentPlayer ? tablePlayers.slice(1) : []
 
   const playerDirections = useMemo<Record<string, PlayerDirection>>(
     () =>
-      players.reduce((acc, player, index) => {
-        acc[player.id] = getPlayerDirection(index, players.length)
+      tablePlayers.reduce((acc, player, index) => {
+        acc[player.id] = getPlayerDirection(index, tablePlayers.length)
         return acc
       }, {} as Record<string, PlayerDirection>),
-    [players]
+    [tablePlayers]
   )
 
   const deckOrigin = useMemo(() => getDeckOrigin(width, height), [width, height])
@@ -94,16 +101,31 @@ export default function GameTable() {
 
   const playerTargets = useMemo<Record<string, Point2D>>(
     () =>
-      players.reduce((acc, player, index) => {
-        acc[player.id] = getPlayerTargetPoint(index, players.length, width, height, isMobile)
+      tablePlayers.reduce((acc, player, index) => {
+        acc[player.id] = getPlayerTargetPoint(index, tablePlayers.length, width, height, isMobile)
         return acc
       }, {} as Record<string, Point2D>),
-    [players, width, height, isMobile]
+    [tablePlayers, width, height, isMobile]
   )
 
   useEffect(() => {
+    setDealtCounts(
+      tablePlayers.reduce((acc, player) => {
+        acc[player.id] = 0
+        return acc
+      }, {} as Record<string, number>)
+    )
+  }, [tablePlayers])
+
+  useEffect(() => {
+    if (tablePlayers.length === 0) {
+      setIsTrumpRevealed(false)
+      setActiveFlights([])
+      return
+    }
+
     setIsTrumpRevealed(false)
-    const totalDeals = players.length * 5
+    const totalDeals = tablePlayers.length * 5
     const travelDuration = isMobile ? 360 : 440
     let cancelled = false
     let flightTimer: ReturnType<typeof setTimeout> | null = null
@@ -144,7 +166,7 @@ export default function GameTable() {
         return
       }
 
-      const targetPlayer = players[dealIndex % players.length]
+      const targetPlayer = tablePlayers[dealIndex % tablePlayers.length]
       const direction = playerDirections[targetPlayer.id] ?? 'top'
       const dealId = `${targetPlayer.id}-${dealIndex}`
       const targetPoint = playerTargets[targetPlayer.id] ?? deckOrigin
@@ -174,10 +196,13 @@ export default function GameTable() {
       setIsTrumpRevealed(false)
       setActiveFlights([])
     }
-  }, [players, playerDirections, playerTargets, deckOrigin, isMobile, trumpTarget])
+  }, [tablePlayers, playerDirections, playerTargets, deckOrigin, isMobile, trumpTarget])
 
-  const visibleHandCount = Math.min(playerHand.length, dealtCounts[currentPlayer.id] ?? 0)
-  const visibleHand = useMemo(() => playerHand.slice(0, visibleHandCount), [playerHand, visibleHandCount])
+  const visibleHandCount = currentPlayer ? Math.min(playerHand.length, dealtCounts[currentPlayer.id] ?? 0) : 0
+  const visibleHand = useMemo<PlayingCard[]>(
+    () => (currentPlayer ? playerHand.slice(0, visibleHandCount) : []),
+    [playerHand, visibleHandCount, currentPlayer]
+  )
 
   useEffect(() => {
     setSelectedCards((prev) => {
@@ -187,10 +212,13 @@ export default function GameTable() {
     })
   }, [visibleHand])
 
-  const totalDealsNeeded = players.length * 5 + 1
-  const totalDealt = players.reduce((sum, player) => sum + (dealtCounts[player.id] ?? 0), 0)
+  const totalDealsNeeded = tablePlayers.length * 5 + 1
+  const totalDealt = tablePlayers.reduce((sum, player) => sum + (dealtCounts[player.id] ?? 0), 0)
   const dealtWithTrump = totalDealt + (isTrumpRevealed ? 1 : 0)
   const remainingCards = Math.max(totalDealsNeeded - dealtWithTrump - activeFlights.length, 0)
+
+  const displayPlayerCount = playerCount ?? tablePlayers.length
+  const displayMaxPlayers = maxPlayers ?? Math.max(tablePlayers.length, displayPlayerCount, 1)
 
   return (
     <ResponsiveContainer bg="$background" overflow="hidden">
@@ -204,12 +232,57 @@ export default function GameTable() {
 
         <FloatingCards cards={floatingCards} isMobile={isMobile} />
 
+        <YStack
+          position="absolute"
+          top={isMobile ? '$3' : '$4'}
+          left={isMobile ? '$3' : '$4'}
+          bg="rgba(15, 23, 42, 0.85)"
+          px="$3"
+          py="$2"
+          br="$4"
+          borderWidth={1}
+          borderColor="rgba(255,255,255,0.1)"
+          gap="$1"
+          shadowColor="#000"
+          shadowOpacity={0.45}
+          shadowRadius={12}
+        >
+          <Paragraph color="$color" fontSize="$2" opacity={0.8} fontWeight="600">
+            Players Online
+          </Paragraph>
+          <Paragraph color="$color" fontSize="$6" fontWeight="800">
+            {displayPlayerCount}/{displayMaxPlayers}
+          </Paragraph>
+        </YStack>
+
+        {onLeaveGame && (
+          <YStack
+            position="absolute"
+            top={isMobile ? '$3' : '$4'}
+            right={isMobile ? '$3' : '$4'}
+            gap="$2"
+            ai="flex-end"
+          >
+            <Button
+              size={isMobile ? '$3' : '$4'}
+              bg="$error"
+              color="$background"
+              onPress={onLeaveGame}
+              pressStyle={{ scale: 0.97 }}
+              hoverStyle={{ scale: 1.02 }}
+              animation="bouncy"
+            >
+              Leave Game
+            </Button>
+          </YStack>
+        )}
+
         {otherPlayers.map((player, idx) => (
           <PlayerBadge
             key={player.id}
             player={player}
             isMobile={isMobile}
-            placementStyle={getPlayerPosition(idx + 1, players.length, width, height, isMobile)}
+            placementStyle={getPlayerPosition(idx + 1, tablePlayers.length, width, height, isMobile)}
             dealtCount={dealtCounts[player.id] ?? 0}
           />
         ))}
@@ -242,12 +315,14 @@ export default function GameTable() {
           paddingHorizontal={isMobile ? '$3' : '$4'}
         >
           <XStack jc="space-between" ai="flex-end" gap="$3">
-            <PlayerBadge
-              player={currentPlayer}
-              isMobile={isMobile}
-              variant="inline"
-              dealtCount={dealtCounts[currentPlayer.id] ?? 0}
-            />
+            {currentPlayer && (
+              <PlayerBadge
+                player={currentPlayer}
+                isMobile={isMobile}
+                variant="inline"
+                dealtCount={dealtCounts[currentPlayer.id] ?? 0}
+              />
+            )}
             <YStack flex={0} width={isMobile ? 40 : 48} />
           </XStack>
         </YStack>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button, Card, H2, H3, Input, Paragraph, XStack, YStack, Separator, Spinner, ScrollView, Circle } from 'tamagui'
 import { Users, Play, Crown, UserX, Copy, LogOut, Check, AlertCircle, Link as LinkIcon } from '@tamagui/lucide-icons'
 import * as Clipboard from 'expo-clipboard'
@@ -9,11 +9,15 @@ import { useGameClient } from 'utils/gameClient'
 import { useResponsive, useResponsiveIconSize } from 'hooks/useResponsive'
 import type { GameState, Player, LobbyInfo } from 'types/game'
 import { useRouter } from 'expo-router'
+import GameTable from './game-table'
+import type { TablePlayer } from 'components/game-table/types'
 
 // Configure your PartyKit host here
 const PARTYKIT_HOST = process.env.EXPO_PUBLIC_PARTYKIT_HOST || 'localhost:1999'
 
 type ScreenMode = 'home' | 'create' | 'join' | 'lobby' | 'game'
+
+const getFallbackAvatar = (index: number) => `P${index + 1}`
 
 export default function LandingScreen() {
   const router = useRouter()
@@ -259,6 +263,34 @@ export default function LandingScreen() {
 
   const isHost = gameState?.hostId === currentPlayerId
   const canStartGame = gameState && gameState.players.length >= 2
+
+  const tablePlayers = useMemo<TablePlayer[]>(() => {
+    if (!gameState || gameState.players.length === 0) {
+      return []
+    }
+
+    const ordered = [...gameState.players]
+    ordered.sort((a, b) => {
+      if (currentPlayerId) {
+        if (a.id === currentPlayerId) return -1
+        if (b.id === currentPlayerId) return 1
+      }
+      return a.joinedAt - b.joinedAt
+    })
+
+    return ordered.map((player, index) => {
+      const displayName = player.name ? player.name.toUpperCase() : `PLAYER ${index + 1}`
+      const baseCoins = 2_000_000 + index * 250_000
+      const coinsBoost = Math.max(player.score, 0) * 10_000
+      return {
+        id: player.id,
+        avatar: player.avatar ?? getFallbackAvatar(index),
+        displayName,
+        coins: baseCoins + coinsBoost,
+        isCurrentTurn: gameState.currentTurn ? player.id === gameState.currentTurn : player.id === currentPlayerId,
+      }
+    })
+  }, [gameState, currentPlayerId])
 
   // Home Screen
   if (mode === 'home') {
@@ -666,26 +698,13 @@ export default function LandingScreen() {
   // Game Screen - Simplified for now
   if (mode === 'game' && gameState) {
     return (
-      <ResponsiveContainer key="game" bg="$background">
-        <GameHeader />
-        <YStack flex={1} alignItems="center" justifyContent="center" px={isMobile ? '$3' : '$4'} gap="$4">
-          <Card elevate bordered p={isMobile ? '$4' : '$6'}>
-            <YStack gap="$3" alignItems="center">
-              <H2 color="$primary">Game Started!</H2>
-              <Paragraph>Round: {gameState.round}</Paragraph>
-              <Paragraph>Current Turn: {gameState.players.find(p => p.id === gameState.currentTurn)?.name}</Paragraph>
-              
-              <Button
-                size="$4"
-                bg="$error"
-                onPress={handleLeaveLobby}
-              >
-                Leave Game
-              </Button>
-            </YStack>
-          </Card>
-        </YStack>
-      </ResponsiveContainer>
+      <GameTable
+        key="game"
+        players={tablePlayers.length ? tablePlayers : undefined}
+        playerCount={gameState.players.length}
+        maxPlayers={gameState.maxPlayers}
+        onLeaveGame={handleLeaveLobby}
+      />
     )
   }
 
