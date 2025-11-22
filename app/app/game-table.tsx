@@ -15,8 +15,6 @@ import type { PlayingCard as TableCard, TablePlayer } from '../components/game-t
 import type { PlayingCard as EngineCard, PendingAction, RoundPhase, Suit, TrickView } from '../types/game'
 import type { GameCardSize } from '../components/game-table/GameCard'
 import { BidPanel } from '../components/game-table/BidPanel'
-import { TrickStatus } from '../components/game-table/TrickStatus'
-import { HandToolbar } from '../components/game-table/HandToolbar'
 
 interface GameTableProps {
   players?: TablePlayer[]
@@ -226,7 +224,6 @@ export default function GameTable({
   const [lastDealtRound, setLastDealtRound] = useState<number | null>(null)
   const awaitingDeal = phase === 'bidding' && round > 0 && lastDealtRound !== round
   const showBidPanel = phase === 'bidding'
-  const showTrickStatus = phase !== 'bidding'
   const activeBidder = useMemo(() => {
     if (!showBidPanel) return null
     return tablePlayers.find((player) => player.isCurrentTurn) ?? null
@@ -371,11 +368,6 @@ export default function GameTable({
     setSelectedCards(new Set())
   }
 
-  const handleClearSelection = () => setSelectedCards(new Set())
-
-  const displayPlayerCount = playerCount ?? tablePlayers.length
-  const displayMaxPlayers = maxPlayers ?? Math.max(tablePlayers.length, displayPlayerCount, 1)
-
   return (
     <ResponsiveContainer bg="$background" overflow="hidden">
       <Stack flex={1} position="relative" overflow="hidden">
@@ -414,8 +406,8 @@ export default function GameTable({
         >
           <YStack
             bg="rgba(15, 23, 42, 0.85)"
-            px="$3"
-            py="$2"
+            px="$4"
+            py="$3"
             br="$4"
             borderWidth={1}
             borderColor="rgba(255,255,255,0.1)"
@@ -424,11 +416,8 @@ export default function GameTable({
             shadowOpacity={0.45}
             shadowRadius={12}
           >
-            <Paragraph color="$color" fontSize="$2" opacity={0.8} fontWeight="600">
-              Players Online
-            </Paragraph>
-            <Paragraph color="$color" fontSize="$6" fontWeight="800">
-              {displayPlayerCount}/{displayMaxPlayers}
+            <Paragraph color="$color" fontSize="$7" fontWeight="600">
+              Round {round}
             </Paragraph>
           </YStack>
 
@@ -448,24 +437,6 @@ export default function GameTable({
           )}
         </XStack>
 
-        {showTrickStatus && (
-          <YStack
-            position="absolute"
-            top={isMobile ? 120 : 150}
-            left={isMobile ? '$3' : '$4'}
-            right={isMobile ? '$3' : '$4'}
-          >
-            <TrickStatus
-              players={tablePlayers}
-              currentTrick={currentTrick}
-              trump={trump}
-              phase={phase}
-              pendingAction={pendingAction}
-              round={round}
-              lastTrickWinner={lastTrickWinner}
-            />
-          </YStack>
-        )}
 
         {otherPlayers.map((player, idx) => (
           <PlayerBadge
@@ -517,18 +488,6 @@ export default function GameTable({
             />
           )}
 
-          <HandToolbar
-            selectedCardId={selectedCardId}
-            onPlay={handlePlay}
-            onClear={handleClearSelection}
-            canPlay={canPlayCard}
-            phase={phase}
-            pendingAction={pendingAction}
-            isMyTurn={isMyTurn}
-            handCount={displayedHand.length}
-            myBid={myBid}
-            tricksWon={myTricksWon ?? 0}
-          />
         </YStack>
 
         <PlayerHand
