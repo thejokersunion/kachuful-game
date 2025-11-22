@@ -353,7 +353,9 @@ export default function GameTable({
     }
   }, [width, height, isMobile, trumpCardDimensions])
 
-  const showBidPanel = phase === 'bidding'
+  const expectedHandCount = handSize || tableHand.length
+  const dealPresentationComplete = !awaitingDeal && !isDealing && revealedHandCount >= expectedHandCount
+  const showBidPanel = phase === 'bidding' && dealPresentationComplete
   const activeBidder = useMemo(() => {
     if (!showBidPanel) return null
     return tablePlayers.find((player) => player.isCurrentTurn) ?? null

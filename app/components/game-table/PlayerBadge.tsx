@@ -1,4 +1,5 @@
-import { memo } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { Animated, Easing } from 'react-native'
 import { Circle, Text, XStack, YStack } from 'tamagui'
 import type { TablePlayer } from './types'
 import { formatCoins } from './helpers'
@@ -12,8 +13,60 @@ interface PlayerBadgeProps {
   pulse?: boolean
 }
 
+const SAFE_BID_COLOR = '#34D399'
+const BOLD_BID_COLOR = '#FBBF24'
+const PARTICLE_GLYPHS = ['♠', '♦', '♥', '♣', '✦'] as const
+
+function getBidGlowTheme(bid: number | null, totalCards: number) {
+  if (bid === null || totalCards <= 0) {
+    return {
+      color: 'rgba(255,255,255,0.65)',
+      background: 'rgba(255,255,255,0.04)',
+    }
+  }
+  const ratio = Math.min(Math.max(bid / totalCards, 0), 1)
+  if (ratio >= 0.7) {
+    return {
+      color: BOLD_BID_COLOR,
+      background: 'rgba(251,191,36,0.18)',
+    }
+  }
+  return {
+    color: SAFE_BID_COLOR,
+    background: 'rgba(52,211,153,0.2)',
+  }
+}
+
 function Component({ player, isMobile, placementStyle, variant = 'overlay', dealtCount = 0, pulse = false }: PlayerBadgeProps) {
   const avatarSize = isMobile ? 36 : 48
+  const cardsInHand = dealtCount || player.handCount || 0
+  const bidTheme = useMemo(() => getBidGlowTheme(player.bid, cardsInHand), [player.bid, cardsInHand])
+  const rippleAnim = useRef(new Animated.Value(0)).current
+  const [bidPulseKey, setBidPulseKey] = useState(0)
+  const prevBidRef = useRef<number | null>(player.bid)
+
+  useEffect(() => {
+    prevBidRef.current = player.bid
+  }, [player.id])
+
+  useEffect(() => {
+    if (player.bid === null) {
+      prevBidRef.current = player.bid
+      return
+    }
+    if (prevBidRef.current === player.bid) {
+      return
+    }
+    prevBidRef.current = player.bid
+    setBidPulseKey(Date.now())
+    rippleAnim.setValue(0)
+    Animated.timing(rippleAnim, {
+      toValue: 1,
+      duration: 600,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start()
+  }, [player.bid, rippleAnim])
 
   const statusColor = player.status === 'connected' || player.status === 'playing' ? '#34D399' : '#FBBF24'
   const bidLabel = player.bid ?? '—'
@@ -35,10 +88,6 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
       shadowOffset={{ width: 0, height: 3 }}
       animation="bouncy"
       scale={pulse ? 1.04 : 1}
-      shadowColor={pulse ? '#FBBF24' : player.isCurrentTurn ? '#10B981' : '#000'}
-      shadowOpacity={pulse ? 0.95 : player.isCurrentTurn ? 0.9 : 0.5}
-      shadowRadius={pulse ? 18 : player.isCurrentTurn ? 12 : 6}
-      borderColor={pulse ? '#FBBF24' : player.isCurrentTurn ? '#10B981' : 'rgba(255, 255, 255, 0.15)'}
       style={
         variant === 'overlay'
           ? {
@@ -55,13 +104,34 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
     >
       {/* Avatar glow */}
       <YStack position="relative">
+        {player.bid !== null && (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: -(avatarSize * 0.5),
+              left: -(avatarSize * 0.5),
+              width: avatarSize * 2,
+              height: avatarSize * 2,
+              borderRadius: (avatarSize * 2) / 2,
+              borderWidth: 1.5,
+              borderColor: bidTheme.color,
+              opacity: rippleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
+              transform: [
+                {
+                  scale: rippleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1.4] }),
+                },
+              ],
+            }}
+          />
+        )}
         {(player.isCurrentTurn || pulse) && (
           <Circle
             size={avatarSize + 6}
             position="absolute"
             top={-3}
             left={-3}
-            bg={pulse ? '#FBBF24' : '#10B981'}
+            bg={pulse ? '#FBBF24' : bidTheme.color === SAFE_BID_COLOR ? '#10B981' : '#FBBF24'}
             opacity={pulse ? 0.45 : 0.3}
             animation="bouncy"
           />
@@ -71,11 +141,14 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
           overflow="hidden"
           bg="#F1F5F9"
           borderWidth={1.5}
-          borderColor={player.isCurrentTurn ? '#10B981' : 'rgba(255, 255, 255, 0.2)'}
           shadowColor="#000"
           shadowRadius={3}
           shadowOpacity={0.3}
-          style={{ backgroundImage: 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)', backgroundColor: '#F1F5F9' }}
+          style={{
+            backgroundImage: 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)',
+            backgroundColor: '#F1F5F9',
+            borderColor: player.isCurrentTurn ? bidTheme.color : 'rgba(255, 255, 255, 0.2)',
+          }}
         >
           <Text fontSize={isMobile ? 18 : 24}>{player.avatar ?? '🎴'}</Text>
         </Circle>
@@ -123,13 +196,25 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
         </XStack>
         {/* @ts-ignore */}
         <XStack gap="$2" ai="center" mt="$1">
-          <YStack gap="$0.5">
-            <Text color="rgba(255,255,255,0.65)" fontSize={10}>
+          <YStack
+            gap="$0.5"
+            position="relative"
+            px="$1.5"
+            py="$0.5"
+            br="$2"
+            style={{ backgroundColor: bidTheme.background }}
+          >
+            <Text style={{ color: 'rgba(255,255,255,0.65)' }} fontSize={10}>
               Bid
             </Text>
-            <Text color={player.bid !== null ? '#FBBF24' : 'rgba(255,255,255,0.4)'} fontSize={14} fontWeight="800">
+            <Text
+              style={{ color: player.bid !== null ? bidTheme.color : 'rgba(255,255,255,0.4)' }}
+              fontSize={14}
+              fontWeight="800"
+            >
               {bidLabel}
             </Text>
+            {player.bid !== null ? <ParticleBurst triggerKey={bidPulseKey} color={bidTheme.color} /> : null}
           </YStack>
           <YStack gap="$0.5">
             <Text color="rgba(255,255,255,0.65)" fontSize={10}>
@@ -184,6 +269,88 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
         </XStack>
       </YStack>
     </XStack>
+  )
+}
+
+interface ParticleConfig {
+  id: string
+  progress: Animated.Value
+  driftX: number
+  driftY: number
+  scale: number
+  glyph: (typeof PARTICLE_GLYPHS)[number]
+  fontSize: number
+  delay: number
+}
+
+interface ParticleBurstProps {
+  triggerKey: number
+  color: string
+}
+
+function ParticleBurst({ triggerKey, color }: ParticleBurstProps) {
+  const [particles, setParticles] = useState<ParticleConfig[]>([])
+
+  useEffect(() => {
+    if (!triggerKey) return
+    const created: ParticleConfig[] = Array.from({ length: 6 }, (_, idx) => ({
+      id: `${triggerKey}-${idx}`,
+      progress: new Animated.Value(0),
+      driftX: (Math.random() - 0.5) * 26,
+      driftY: -20 - Math.random() * 16,
+      scale: 0.8 + Math.random() * 0.4,
+      glyph: PARTICLE_GLYPHS[idx % PARTICLE_GLYPHS.length],
+      fontSize: 10 + Math.random() * 4,
+      delay: idx * 35,
+    }))
+    setParticles(created)
+
+    created.forEach((particle) => {
+      Animated.timing(particle.progress, {
+        toValue: 1,
+        duration: 500,
+        delay: particle.delay,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start()
+    })
+
+    const timeout = setTimeout(() => setParticles([]), 520 + created.length * 35)
+    return () => clearTimeout(timeout)
+  }, [triggerKey])
+
+  if (!particles.length) return null
+
+  return (
+    <YStack position="absolute" top={0} left={0} right={0} bottom={0} pointerEvents="none" ai="center" jc="center">
+      {particles.map((particle) => (
+        <Animated.Text
+          key={particle.id}
+          style={{
+            position: 'absolute',
+            color,
+            fontSize: particle.fontSize,
+            opacity: particle.progress.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] }),
+            transform: [
+              {
+                translateX: particle.progress.interpolate({ inputRange: [0, 1], outputRange: [0, particle.driftX] }),
+              },
+              {
+                translateY: particle.progress.interpolate({ inputRange: [0, 1], outputRange: [0, particle.driftY] }),
+              },
+              {
+                scale: particle.progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [particle.scale * 0.5, particle.scale],
+                }),
+              },
+            ],
+          }}
+        >
+          {particle.glyph}
+        </Animated.Text>
+      ))}
+    </YStack>
   )
 }
 
