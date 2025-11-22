@@ -13,14 +13,14 @@ interface GameCardProps {
   onPress?: () => void
 }
 
-const sizeMap: Record<GameCardSize, { width: number; height: number; fontSize: number }> = {
+export const GAME_CARD_DIMENSIONS: Record<GameCardSize, { width: number; height: number; fontSize: number }> = {
   small: { width: 40, height: 56, fontSize: 16 },
   normal: { width: 60, height: 84, fontSize: 24 },
   large: { width: 80, height: 112, fontSize: 32 },
 }
 
 function Component({ card, selected, onPress, size = 'normal' }: GameCardProps) {
-  const dimensions = sizeMap[size]
+  const dimensions = GAME_CARD_DIMENSIONS[size]
   const suitColor = getSuitColor(card.suit)
   const flipAnim = useRef(new Animated.Value(0)).current
 

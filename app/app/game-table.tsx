@@ -11,10 +11,12 @@ import { PlayerHand } from '../components/game-table/PlayerHand'
 import { TrumpCardSpotlight } from '../components/game-table/TrumpCardSpotlight'
 import { CenterDeck } from '../components/game-table/CenterDeck'
 import { CenterPile } from '../components/game-table/CenterPile'
+import { CardSlide } from '../components/game-table/CardSlide'
 import { getDeckOrigin, type Point2D } from '../components/game-table/animationTargets'
 import { getPlayerDirection, getPlayerPosition, getPlayerTargetPoint, type PlayerDirection } from '../components/game-table/playerLayout'
 import type { PlayingCard as TableCard, TablePlayer } from '../components/game-table/types'
 import type { PlayingCard as EngineCard, PendingAction, RoundPhase, Suit, TrickView } from '../types/game'
+import { GAME_CARD_DIMENSIONS } from '../components/game-table/GameCard'
 import type { GameCardSize } from '../components/game-table/GameCard'
 import { BidPanel } from '../components/game-table/BidPanel'
 
@@ -49,6 +51,21 @@ interface DealFlight {
   revealDelay?: number
   cardRank?: string
   cardSuit?: TableCard['suit']
+}
+
+interface PlaySlideFlight {
+  id: string
+  card: TableCard
+  origin: Point2D
+  target: Point2D
+  size: GameCardSize
+  delay?: number
+  duration?: number
+}
+
+interface BadgePulseState {
+  playerId: string
+  until: number
 }
 
 const RANK_LABEL: Record<number, TableCard['rank']> = {
@@ -123,22 +140,20 @@ export default function GameTable({
 }: GameTableProps = {}) {
   const { width, height, isMobile, isTablet } = useResponsive()
   const [dealFlights, setDealFlights] = useState<DealFlight[]>([])
-  const [playFlights, setPlayFlights] = useState<DealFlight[]>([])
+  const [playSlides, setPlaySlides] = useState<PlaySlideFlight[]>([])
   const [isDealing, setIsDealing] = useState(false)
   const [deckHidden, setDeckHidden] = useState(false)
+  const [collectSlides, setCollectSlides] = useState<PlaySlideFlight[]>([])
+  const [badgePulse, setBadgePulse] = useState<BadgePulseState | null>(null)
   const dealTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
-  const playTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
   const deckHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previousTrickRef = useRef<TrickView[]>([])
+  const lastSelfPlayRef = useRef<{ cardId: string; index: number; total: number } | null>(null)
+  const lastTrickCardsRef = useRef<TableCard[]>([])
 
   const clearDealTimers = useCallback(() => {
     dealTimeoutsRef.current.forEach((timer) => clearTimeout(timer))
     dealTimeoutsRef.current = []
-  }, [])
-
-  const clearPlayTimers = useCallback(() => {
-    playTimeoutsRef.current.forEach((timer) => clearTimeout(timer))
-    playTimeoutsRef.current = []
   }, [])
 
   const tablePlayers = providedPlayers && providedPlayers.length > 0 ? providedPlayers : defaultPlayers
@@ -161,6 +176,12 @@ export default function GameTable({
   const [trumpRevealed, setTrumpRevealed] = useState(Boolean(trump))
   const displayedHand = useMemo(() => tableHand.slice(0, revealedHandCount), [tableHand, revealedHandCount])
   const trickCards = useMemo<TableCard[]>(() => currentTrick.map(({ card }) => mapToTableCard(card)), [currentTrick])
+
+  useEffect(() => {
+    if (currentTrick.length > 0) {
+      lastTrickCardsRef.current = currentTrick.map(({ card }) => mapToTableCard(card))
+    }
+  }, [currentTrick])
 
   const playableSet = useMemo(() => {
     if (!playableCardIds) return null
@@ -272,6 +293,19 @@ export default function GameTable({
   }, [deckIsDocked])
   const handRailOffset = isMobile ? 170 : 230
   const handBottomOffset = isMobile ? 24 : 36
+  const getSelfCardOrigin = useCallback(
+    (cardIndex: number, totalCards: number): Point2D => {
+      const dimensions = GAME_CARD_DIMENSIONS[cardSize]
+      const overlap = cardSize === 'large' ? 20 : 15
+      const spacing = dimensions.width - overlap
+      const centerX = (width ?? 0) / 2
+      const offsetFromCenter = (cardIndex - (totalCards - 1) / 2) * spacing
+      const x = centerX + offsetFromCenter
+      const y = Math.max((height ?? 0) - handBottomOffset - dimensions.height / 2, 0)
+      return { x, y }
+    },
+    [cardSize, handBottomOffset, height, width]
+  )
   const trumpCardDimensions = useMemo(
     () => ({ width: isMobile ? 90 : 120, height: isMobile ? 126 : 168 }),
     [isMobile]
@@ -416,13 +450,12 @@ export default function GameTable({
   useEffect(() => {
     return () => {
       clearDealTimers()
-      clearPlayTimers()
       if (deckHideTimeoutRef.current) {
         clearTimeout(deckHideTimeoutRef.current)
         deckHideTimeoutRef.current = null
       }
     }
-  }, [clearDealTimers, clearPlayTimers])
+  }, [clearDealTimers])
 
   useEffect(() => {
     const hasCards = (handSize ?? tableHand.length) > 0
@@ -434,43 +467,81 @@ export default function GameTable({
     startDealAnimation()
   }, [phase, round, handSize, tableHand.length, tablePlayers.length, startDealAnimation, lastDealtRound])
 
-  useEffect(() => {
-    const previousTrick = previousTrickRef.current
-    const previousIds = new Set(previousTrick.map((entry) => entry.card.id))
-    const newEntries = currentTrick.filter((entry) => !previousIds.has(entry.card.id))
+    useEffect(() => {
+      const previousTrick = previousTrickRef.current
+      const previousIds = new Set(previousTrick.map((entry) => entry.card.id))
+      const newEntries = currentTrick.filter((entry) => !previousIds.has(entry.card.id))
 
-    if (newEntries.length) {
-      newEntries.forEach((entry) => {
-        const playerIndex = tablePlayers.findIndex((player) => player.id === entry.playerId)
-        const mapping = playerIndex >= 0 ? playerTargets[playerIndex] : null
-        const originPoint = mapping?.target ?? deckOrigin
-        const direction = mapping?.direction ?? 'top'
-        const tableCard = mapToTableCard(entry.card)
-        const flightId = `play-${entry.card.id}-${Date.now()}`
+      if (newEntries.length) {
+        const newSlides: PlaySlideFlight[] = []
 
-        setPlayFlights((prev) => [
-          ...prev,
-          {
-            id: flightId,
-            direction,
+        newEntries.forEach((entry, idx) => {
+          const playerIndex = tablePlayers.findIndex((player) => player.id === entry.playerId)
+          const mapping = playerIndex >= 0 ? playerTargets[playerIndex] : null
+          let originPoint = mapping?.target ?? deckOrigin
+          const tableCard = mapToTableCard(entry.card)
+
+          if (entry.playerId === currentPlayer?.id) {
+            const pending = lastSelfPlayRef.current
+            if (pending && pending.cardId === entry.card.id) {
+              originPoint = getSelfCardOrigin(pending.index, pending.total)
+              lastSelfPlayRef.current = null
+            }
+          }
+
+          newSlides.push({
+            id: `play-${entry.card.id}-${Date.now()}-${idx}`,
+            card: tableCard,
             origin: originPoint,
             target: deckOrigin,
-            reveal: true,
-            revealDelay: 80,
-            cardRank: tableCard.rank,
-            cardSuit: tableCard.suit,
-          },
-        ])
+            size: cardSize,
+            delay: idx * 40,
+          })
+        })
 
-        const expiry = setTimeout(() => {
-          setPlayFlights((prevState) => prevState.filter((flight) => flight.id !== flightId))
-        }, 1000)
-        playTimeoutsRef.current.push(expiry)
+        if (newSlides.length) {
+          setPlaySlides((prev) => [...prev, ...newSlides])
+        }
+      }
+
+      previousTrickRef.current = currentTrick
+    }, [cardSize, currentPlayer?.id, currentTrick, deckOrigin, getSelfCardOrigin, playerTargets, tablePlayers])
+
+    useEffect(() => {
+      if (!lastTrickWinner) return
+      if (currentTrick.length > 0) return
+      const winnerIndex = tablePlayers.findIndex((player) => player.id === lastTrickWinner)
+      if (winnerIndex < 0) return
+      const cardsToCollect = lastTrickCardsRef.current
+      if (!cardsToCollect.length) return
+
+      const targetPoint = playerTargets[winnerIndex]?.target ?? deckOrigin
+      const centerPoint = deckOrigin
+      const gatherOffsets = cardsToCollect.map((_, idx) => {
+        const phase = (idx / cardsToCollect.length) * Math.PI
+        const radius = 18
+        return {
+          x: Math.cos(phase) * radius * 0.4,
+          y: Math.sin(phase) * radius * 0.25,
+        }
       })
-    }
+      const slides = cardsToCollect.map((card, idx) => ({
+        id: `collect-${card.id}-${Date.now()}-${idx}`,
+        card,
+        origin: {
+          x: centerPoint.x + gatherOffsets[idx].x,
+          y: centerPoint.y + gatherOffsets[idx].y,
+        },
+        target: targetPoint,
+        size: cardSize,
+        delay: 180 + idx * 60,
+        duration: 460,
+      }))
 
-    previousTrickRef.current = currentTrick
-  }, [currentTrick, tablePlayers, playerTargets, deckOrigin])
+      setCollectSlides((prev) => [...prev, ...slides])
+      setBadgePulse({ playerId: lastTrickWinner, until: Date.now() + 1600 })
+      lastTrickCardsRef.current = []
+    }, [cardSize, currentTrick.length, deckOrigin, lastTrickWinner, playerTargets, tablePlayers])
 
   const canBid = showBidPanel && pendingAction === 'bid' && isMyTurn
   const isHandInteractive = phase === 'playing' && pendingAction === 'play' && isMyTurn
@@ -485,6 +556,12 @@ export default function GameTable({
   const handlePlay = (cardId?: string) => {
     const playId = cardId ?? selectedCardId
     if (!playId) return
+    const cardIndex = displayedHand.findIndex((card) => card.id === playId)
+    if (cardIndex >= 0) {
+      lastSelfPlayRef.current = { cardId: playId, index: cardIndex, total: displayedHand.length }
+    } else {
+      lastSelfPlayRef.current = null
+    }
     onPlayCard?.(playId)
     setSelectedCards(new Set())
   }
@@ -531,17 +608,33 @@ export default function GameTable({
           />
         ))}
 
-        {playFlights.map((flight) => (
-          <CardFlight
-            key={flight.id}
-            direction={flight.direction}
-            origin={flight.origin}
-            target={flight.target}
-            isMobile={isMobile}
-            revealCard={flight.reveal}
-            revealDelay={flight.revealDelay}
-            cardRank={flight.cardRank}
-            cardSuit={flight.cardSuit}
+        {playSlides.map((slide) => (
+          <CardSlide
+            key={slide.id}
+            card={slide.card}
+            origin={slide.origin}
+            target={slide.target}
+            size={slide.size}
+            delay={slide.delay}
+            duration={slide.duration}
+            onComplete={() => {
+              setPlaySlides((prev) => prev.filter((item) => item.id !== slide.id))
+            }}
+          />
+        ))}
+
+        {collectSlides.map((slide) => (
+          <CardSlide
+            key={slide.id}
+            card={slide.card}
+            origin={slide.origin}
+            target={slide.target}
+            size={slide.size}
+            delay={slide.delay}
+            duration={slide.duration ?? 420}
+            onComplete={() => {
+              setCollectSlides((prev) => prev.filter((item) => item.id !== slide.id))
+            }}
           />
         ))}
 
@@ -596,6 +689,7 @@ export default function GameTable({
             isMobile={isMobile}
             placementStyle={getPlayerPosition(idx + 1, tablePlayers.length, width, height, isMobile)}
             dealtCount={player.handCount}
+            pulse={badgePulse?.playerId === player.id && badgePulse.until > Date.now()}
           />
         ))}
 
@@ -672,6 +766,7 @@ export default function GameTable({
               bottom: handBottomOffset + (isMobile ? 3 : 3),
               left: isMobile ? 10 : 20,
             }}
+            pulse={badgePulse?.playerId === currentPlayer.id && badgePulse.until > Date.now()}
           />
         )}
       </Stack>

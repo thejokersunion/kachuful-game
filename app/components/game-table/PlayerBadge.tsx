@@ -9,9 +9,10 @@ interface PlayerBadgeProps {
   placementStyle?: Record<string, any>
   variant?: 'overlay' | 'inline'
   dealtCount?: number
+  pulse?: boolean
 }
 
-function Component({ player, isMobile, placementStyle, variant = 'overlay', dealtCount = 0 }: PlayerBadgeProps) {
+function Component({ player, isMobile, placementStyle, variant = 'overlay', dealtCount = 0, pulse = false }: PlayerBadgeProps) {
   const avatarSize = isMobile ? 36 : 48
 
   const statusColor = player.status === 'connected' || player.status === 'playing' ? '#34D399' : '#FBBF24'
@@ -26,13 +27,18 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
       px="$2"
       gap="$2"
       ai="center"
-      borderWidth={player.isCurrentTurn ? 2 : 1.5}
-      borderColor={player.isCurrentTurn ? '#10B981' : 'rgba(255, 255, 255, 0.15)'}
-      shadowColor={player.isCurrentTurn ? '#10B981' : '#000'}
-      shadowRadius={player.isCurrentTurn ? 12 : 6}
-      shadowOpacity={player.isCurrentTurn ? 0.9 : 0.5}
+      borderWidth={pulse ? 2.4 : player.isCurrentTurn ? 2 : 1.5}
+      borderColor={pulse ? '#FBBF24' : player.isCurrentTurn ? '#10B981' : 'rgba(255, 255, 255, 0.15)'}
+      shadowColor={pulse ? '#FBBF24' : player.isCurrentTurn ? '#10B981' : '#000'}
+      shadowRadius={pulse ? 18 : player.isCurrentTurn ? 12 : 6}
+      shadowOpacity={pulse ? 0.95 : player.isCurrentTurn ? 0.9 : 0.5}
       shadowOffset={{ width: 0, height: 3 }}
       animation="bouncy"
+      scale={pulse ? 1.04 : 1}
+      shadowColor={pulse ? '#FBBF24' : player.isCurrentTurn ? '#10B981' : '#000'}
+      shadowOpacity={pulse ? 0.95 : player.isCurrentTurn ? 0.9 : 0.5}
+      shadowRadius={pulse ? 18 : player.isCurrentTurn ? 12 : 6}
+      borderColor={pulse ? '#FBBF24' : player.isCurrentTurn ? '#10B981' : 'rgba(255, 255, 255, 0.15)'}
       style={
         variant === 'overlay'
           ? {
@@ -49,14 +55,14 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
     >
       {/* Avatar glow */}
       <YStack position="relative">
-        {player.isCurrentTurn && (
+        {(player.isCurrentTurn || pulse) && (
           <Circle
             size={avatarSize + 6}
             position="absolute"
             top={-3}
             left={-3}
-            bg="#10B981"
-            opacity={0.3}
+            bg={pulse ? '#FBBF24' : '#10B981'}
+            opacity={pulse ? 0.45 : 0.3}
             animation="bouncy"
           />
         )}
