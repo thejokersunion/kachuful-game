@@ -23,7 +23,7 @@ import {
   type EngineSnapshot,
   type GameConfig as EngineRulesConfig,
   type ScoreModel
-} from "../../app/game-engine"
+} from "./game-engine"
 
 /**
  * Card Masters Game Server - Enterprise Lobby System

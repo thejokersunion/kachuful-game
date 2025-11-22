@@ -1,6 +1,6 @@
 # Kachuful Game Engine
 
-This module contains the deterministic core logic for Card Masters (Kachuful/Judgement). It is designed to be UI-agnostic so both the PartyKit server and the Expo client can share the same rules implementation.
+This module contains the deterministic core logic for Card Masters (Kachuful/Judgement). It now ships alongside the PartyKit server so gameplay always runs server-side, but the code stays UI-agnostic for tooling/tests that need to exercise the ruleset locally.
 
 ## Design Goals
 

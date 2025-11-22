@@ -16,7 +16,7 @@ import { CardSlide } from '../components/game-table/CardSlide'
 import { getDeckOrigin, type Point2D } from '../components/game-table/animationTargets'
 import { getPlayerDirection, getPlayerPosition, getPlayerTargetPoint, type PlayerDirection } from '../components/game-table/playerLayout'
 import type { PlayingCard as TableCard, TablePlayer } from '../components/game-table/types'
-import type { PlayingCard as EngineCard, PendingAction, RoundPhase, Suit, TrickView } from '../types/game'
+import type { GameStatus, PlayingCard as EngineCard, PendingAction, RoundPhase, Suit, TrickView } from '../types/game'
 import { GAME_CARD_DIMENSIONS } from '../components/game-table/GameCard'
 import type { GameCardSize } from '../components/game-table/GameCard'
 import { BidPanel } from '../components/game-table/BidPanel'
@@ -41,6 +41,9 @@ interface GameTableProps {
   onSubmitBid?: (bid: number) => void
   onPlayCard?: (cardId: string) => void
   playableCardIds?: string[]
+  lobbyCode?: string
+  status?: GameStatus
+  isConnected?: boolean
 }
 
 interface DealFlight {
@@ -108,6 +111,21 @@ const floatingCards: FloatingCardDecoration[] = [
   { suit: '♥', rank: 'Q', id: 'fc3', top: '3%', left: '15%', rotation: 25 },
 ]
 
+const phaseLabelMap: Record<RoundPhase, string> = {
+  idle: 'Waiting',
+  bidding: 'Bidding',
+  playing: 'Playing',
+  scoring: 'Scoring',
+  round_end: 'Round End',
+  completed: 'Match Complete',
+}
+
+const pendingLabelMap: Record<PendingAction, string> = {
+  bid: 'Awaiting bid',
+  play: 'Awaiting card',
+  none: 'Standing by',
+}
+
 const ROUND_SUMMARY_DURATION_MS = 10_000
 const ROUND_SUMMARY_DURATION_SECONDS = Math.floor(ROUND_SUMMARY_DURATION_MS / 1000)
 
@@ -143,6 +161,9 @@ export default function GameTable({
   onSubmitBid,
   onPlayCard,
   playableCardIds,
+  lobbyCode,
+  status,
+  isConnected = true,
 }: GameTableProps = {}) {
   const { width, height, isMobile, isTablet } = useResponsive()
   useEffect(() => {
@@ -404,6 +425,12 @@ export default function GameTable({
   const expectedHandCount = handSize || tableHand.length
   const dealPresentationComplete = !awaitingDeal && !isDealing && revealedHandCount >= expectedHandCount
   const showBidPanel = phase === 'bidding' && dealPresentationComplete
+  const serverPhaseLabel = phaseLabelMap[phase] ?? phase
+  const pendingLabel = pendingLabelMap[pendingAction] ?? 'Standing by'
+  const connectionTone = isConnected ? '$secondary' : '$error'
+  const connectionText = isConnected ? 'Connected to server' : 'Reconnecting…'
+  const connectionBackdrop = isConnected ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.18)'
+  const statusLabel = status ? status.toUpperCase() : '—'
   const activeBidder = useMemo(() => {
     if (!showBidPanel) return null
     return tablePlayers.find((player) => player.isCurrentTurn) ?? null
@@ -637,19 +664,17 @@ export default function GameTable({
       lastTrickCardsRef.current = []
     }, [cardSize, currentTrick.length, deckOrigin, lastTrickWinner, playerTargets, tablePlayers])
 
-  const canBid = showBidPanel && pendingAction === 'bid' && isMyTurn
-  const isHandInteractive = phase === 'playing' && pendingAction === 'play' && isMyTurn
+  const canBid = showBidPanel && pendingAction === 'bid' && isMyTurn && isConnected
+  const isHandInteractive = phase === 'playing' && pendingAction === 'play' && isMyTurn && isConnected
   const canPlayCard = Boolean(
     selectedCardId &&
-      phase === 'playing' &&
-      pendingAction === 'play' &&
-      isMyTurn &&
+      isHandInteractive &&
       (!playableSet || playableSet.has(selectedCardId))
   )
 
   const handlePlay = (cardId?: string) => {
     const playId = cardId ?? selectedCardId
-    if (!playId) return
+    if (!playId || !isConnected) return
     const cardIndex = displayedHand.findIndex((card) => card.id === playId)
     if (cardIndex >= 0) {
       lastSelfPlayRef.current = { cardId: playId, index: cardIndex, total: displayedHand.length }

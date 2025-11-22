@@ -443,18 +443,36 @@ export default function LandingScreen() {
   }, [gameState, myBid, myTricksWon, celebrationState.triggered, toast])
 
   const handleSubmitBid = useCallback((amount: number) => {
-    if (Number.isNaN(amount) || amount < 0) {
+    if (
+      Number.isNaN(amount) ||
+      amount < 0 ||
+      !isConnected ||
+      !gameState ||
+      gameState.phase !== 'bidding' ||
+      gameState.pendingAction !== 'bid' ||
+      !isMyTurn
+    ) {
       return
     }
     submitBid(amount)
-  }, [submitBid])
+  }, [gameState, isConnected, isMyTurn, submitBid])
 
   const handlePlayCard = useCallback((cardId: string) => {
-    if (!cardId) {
+    if (
+      !cardId ||
+      !isConnected ||
+      !gameState ||
+      gameState.phase !== 'playing' ||
+      gameState.pendingAction !== 'play' ||
+      !isMyTurn
+    ) {
+      return
+    }
+    if (playableCardIds.length && !playableCardIds.includes(cardId)) {
       return
     }
     playCard(cardId)
-  }, [playCard])
+  }, [gameState, isConnected, isMyTurn, playableCardIds, playCard])
 
   // Home Screen
   if (mode === 'home') {
@@ -915,6 +933,9 @@ export default function LandingScreen() {
         onSubmitBid={handleSubmitBid}
         onPlayCard={handlePlayCard}
         playableCardIds={playableCardIds}
+        lobbyCode={gameState.lobbyCode}
+        status={gameState.status}
+        isConnected={isConnected}
         onLeaveGame={handleLeaveLobby}
       />
     )
