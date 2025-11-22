@@ -23,7 +23,6 @@ export interface Player {
   name: string
   status: PlayerStatus
   score: number
-  cards: PlayingCard[]
   handCount: number
   bid: number | null
   tricksWon: number

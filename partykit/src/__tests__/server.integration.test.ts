@@ -44,6 +44,13 @@ class MockRoom {
   }
 }
 
+const hasCardsField = (value: unknown): boolean => {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  return 'cards' in (value as Record<string, unknown>)
+}
+
 describe('CardMastersServer integration', () => {
   it('plays an entire round using the shared game engine', async () => {
     const hands: Record<string, PlayingCard[]> = {}
@@ -252,6 +259,73 @@ describe('CardMastersServer integration', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('never exposes other players\' hands through shared payloads', async () => {
+    const payloadsSeen: Array<{ connectionId: string; message: ServerMessage }> = []
+    let handUpdateCount = 0
+    let gameStateCount = 0
+
+    const intercept = (connectionId: string, raw: string) => {
+      const message = JSON.parse(raw) as ServerMessage
+      payloadsSeen.push({ connectionId, message })
+
+      if (message.type === 'hand_update') {
+        handUpdateCount += 1
+        const payload = message.payload as HandUpdatePayload
+        expect(connectionId).toBe(payload.playerId)
+        return
+      }
+
+      if (message.type === 'game_state') {
+        gameStateCount += 1
+        const state = message.payload as GameState
+        state.players.forEach(player => {
+          expect(hasCardsField(player)).toBe(false)
+        })
+        return
+      }
+
+      if (message.type === 'player_joined' || message.type === 'player_left' || message.type === 'player_kicked') {
+        if (typeof message.payload === 'object' && message.payload !== null) {
+          expect(hasCardsField(message.payload)).toBe(false)
+        }
+      }
+    }
+
+    const room = new MockRoom('SAFE01', intercept)
+    const server = new CardMastersServer(room as unknown as Party.Room)
+
+    ;(server as unknown as { handSequence: number[] }).handSequence = [1]
+    server.gameState.handSequence = [1]
+    server.gameState.createdAt = 1700000000000
+
+    const hostConn = room.createConnection('host')
+    await server.onConnect(hostConn as unknown as Party.Connection)
+    await server.onMessage(JSON.stringify({ type: 'create_lobby', payload: { hostName: 'Alice', maxPlayers: 3 } }), hostConn as unknown as Party.Connection)
+
+    const player2Conn = room.createConnection('player-2')
+    await server.onConnect(player2Conn as unknown as Party.Connection)
+    await server.onMessage(JSON.stringify({ type: 'join_lobby', payload: { lobbyCode: server.gameState.lobbyCode, playerName: 'Bob' } }), player2Conn as unknown as Party.Connection)
+
+    const player3Conn = room.createConnection('player-3')
+    await server.onConnect(player3Conn as unknown as Party.Connection)
+    await server.onMessage(JSON.stringify({ type: 'join_lobby', payload: { lobbyCode: server.gameState.lobbyCode, playerName: 'Cara' } }), player3Conn as unknown as Party.Connection)
+
+    await server.onMessage(JSON.stringify({ type: 'start_game', payload: {} }), hostConn as unknown as Party.Connection)
+
+    expect(handUpdateCount).toBe(3)
+    expect(gameStateCount).toBeGreaterThan(0)
+
+    // Ensure no shared payload accidentally contained cards data
+    payloadsSeen.forEach(({ message }) => {
+      if (message.type === 'hand_update') {
+        return
+      }
+      if (typeof message.payload === 'object' && message.payload !== null) {
+        expect(hasCardsField(message.payload)).toBe(false)
+      }
+    })
   })
 
   it('assigns unique avatar emojis and reuses freed slots', async () => {

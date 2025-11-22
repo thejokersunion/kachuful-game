@@ -110,7 +110,6 @@ export default function LandingScreen() {
         name: lobby.hostName,
         status: 'connected',
         score: 0,
-        cards: [],
         handCount: 0,
         bid: null,
         tricksWon: 0,

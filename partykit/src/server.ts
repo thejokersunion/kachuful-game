@@ -180,7 +180,6 @@ export default class CardMastersServer implements Party.Server {
       name: payload.hostName,
       status: 'connected' as PlayerStatus,
       score: 0,
-      cards: [],
       handCount: 0,
       bid: null,
       tricksWon: 0,
@@ -247,7 +246,6 @@ export default class CardMastersServer implements Party.Server {
       name: payload.playerName,
       status: 'connected' as PlayerStatus,
       score: 0,
-      cards: [],
       handCount: 0,
       bid: null,
       tricksWon: 0,
@@ -645,7 +643,6 @@ export default class CardMastersServer implements Party.Server {
         handCount: view.handCount,
         bid: view.bid,
         tricksWon: view.tricksWon,
-        cards: [],
         status: player.status === 'disconnected' ? player.status : 'playing',
       }
     })
