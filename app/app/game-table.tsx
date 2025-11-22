@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Animated } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Button, Paragraph, Stack, XStack, YStack } from 'tamagui'
 import { useResponsive } from '../hooks/useResponsive'
@@ -9,6 +10,7 @@ import { PlayerBadge } from '../components/game-table/PlayerBadge'
 import { PlayerHand } from '../components/game-table/PlayerHand'
 import { TrumpCardSpotlight } from '../components/game-table/TrumpCardSpotlight'
 import { CenterDeck } from '../components/game-table/CenterDeck'
+import { CenterPile } from '../components/game-table/CenterPile'
 import { getDeckOrigin, type Point2D } from '../components/game-table/animationTargets'
 import { getPlayerDirection, getPlayerPosition, getPlayerTargetPoint, type PlayerDirection } from '../components/game-table/playerLayout'
 import type { PlayingCard as TableCard, TablePlayer } from '../components/game-table/types'
@@ -121,12 +123,22 @@ export default function GameTable({
 }: GameTableProps = {}) {
   const { width, height, isMobile, isTablet } = useResponsive()
   const [dealFlights, setDealFlights] = useState<DealFlight[]>([])
+  const [playFlights, setPlayFlights] = useState<DealFlight[]>([])
   const [isDealing, setIsDealing] = useState(false)
+  const [deckHidden, setDeckHidden] = useState(false)
   const dealTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const playTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const deckHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previousTrickRef = useRef<TrickView[]>([])
 
   const clearDealTimers = useCallback(() => {
     dealTimeoutsRef.current.forEach((timer) => clearTimeout(timer))
     dealTimeoutsRef.current = []
+  }, [])
+
+  const clearPlayTimers = useCallback(() => {
+    playTimeoutsRef.current.forEach((timer) => clearTimeout(timer))
+    playTimeoutsRef.current = []
   }, [])
 
   const tablePlayers = providedPlayers && providedPlayers.length > 0 ? providedPlayers : defaultPlayers
@@ -148,6 +160,7 @@ export default function GameTable({
   const [revealedHandCount, setRevealedHandCount] = useState(tableHand.length)
   const [trumpRevealed, setTrumpRevealed] = useState(Boolean(trump))
   const displayedHand = useMemo(() => tableHand.slice(0, revealedHandCount), [tableHand, revealedHandCount])
+  const trickCards = useMemo<TableCard[]>(() => currentTrick.map(({ card }) => mapToTableCard(card)), [currentTrick])
 
   const playableSet = useMemo(() => {
     if (!playableCardIds) return null
@@ -190,6 +203,73 @@ export default function GameTable({
   const otherPlayers = currentPlayer ? tablePlayers.slice(1) : []
 
   const remainingCards = deckCount
+  const deckVisualSize = useMemo(() => (isMobile ? { width: 72, height: 108 } : { width: 90, height: 132 }), [isMobile])
+  const deckCenterPosition = useMemo(() => {
+    const safeWidth = width ?? 0
+    const safeHeight = height ?? 0
+    return {
+      x: Math.max((safeWidth - deckVisualSize.width) / 2, 0),
+      y: Math.max((safeHeight - deckVisualSize.height) / 2, 0),
+    }
+  }, [width, height, deckVisualSize])
+  const deckDockPosition = useMemo(() => {
+    const padding = isMobile ? 16 : 28
+    const verticalOffset = isMobile ? 110 : 150
+    return {
+      x: padding,
+      y: verticalOffset,
+    }
+  }, [isMobile])
+  const [lastDealtRound, setLastDealtRound] = useState<number | null>(null)
+  const awaitingDeal = phase === 'bidding' && round > 0 && lastDealtRound !== round
+  const deckIsDocked = !awaitingDeal && !isDealing
+  const deckPositionAnim = useRef(new Animated.Value(0)).current
+  const deckTranslateX = deckPositionAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [deckCenterPosition.x, deckDockPosition.x],
+  })
+  const deckTranslateY = deckPositionAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [deckCenterPosition.y, deckDockPosition.y],
+  })
+  const deckScale = deckPositionAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.6],
+  })
+  const deckOpacity = deckPositionAnim.interpolate({
+    inputRange: [0, 0.8, 1],
+    outputRange: [1, 0.4, 0],
+  })
+  useEffect(() => {
+    Animated.spring(deckPositionAnim, {
+      toValue: deckIsDocked ? 1 : 0,
+      tension: 140,
+      friction: 18,
+      useNativeDriver: false,
+    }).start()
+  }, [deckIsDocked, deckPositionAnim, deckCenterPosition, deckDockPosition])
+
+  useEffect(() => {
+    if (!deckIsDocked) {
+      if (deckHideTimeoutRef.current) {
+        clearTimeout(deckHideTimeoutRef.current)
+        deckHideTimeoutRef.current = null
+      }
+      setDeckHidden(false)
+      return
+    }
+
+    deckHideTimeoutRef.current = setTimeout(() => {
+      setDeckHidden(true)
+    }, 450)
+
+    return () => {
+      if (deckHideTimeoutRef.current) {
+        clearTimeout(deckHideTimeoutRef.current)
+        deckHideTimeoutRef.current = null
+      }
+    }
+  }, [deckIsDocked])
   const handRailOffset = isMobile ? 170 : 230
   const handBottomOffset = isMobile ? 24 : 36
   const trumpCardDimensions = useMemo(
@@ -221,8 +301,6 @@ export default function GameTable({
     }
   }, [width, height, isMobile, trumpCardDimensions])
 
-  const [lastDealtRound, setLastDealtRound] = useState<number | null>(null)
-  const awaitingDeal = phase === 'bidding' && round > 0 && lastDealtRound !== round
   const showBidPanel = phase === 'bidding'
   const activeBidder = useMemo(() => {
     if (!showBidPanel) return null
@@ -331,15 +409,20 @@ export default function GameTable({
     const finishTimer = setTimeout(() => {
       setDealFlights([])
       setIsDealing(false)
-    }, delay + 1400)
+    }, delay + 900)
     dealTimeoutsRef.current.push(finishTimer)
   }, [tablePlayers, handSize, tableHand, trumpCard, clearDealTimers, isMobile, deckOrigin, playerTargets, round, trump, trumpTarget])
 
   useEffect(() => {
     return () => {
       clearDealTimers()
+      clearPlayTimers()
+      if (deckHideTimeoutRef.current) {
+        clearTimeout(deckHideTimeoutRef.current)
+        deckHideTimeoutRef.current = null
+      }
     }
-  }, [clearDealTimers])
+  }, [clearDealTimers, clearPlayTimers])
 
   useEffect(() => {
     const hasCards = (handSize ?? tableHand.length) > 0
@@ -350,6 +433,44 @@ export default function GameTable({
     setLastDealtRound(round)
     startDealAnimation()
   }, [phase, round, handSize, tableHand.length, tablePlayers.length, startDealAnimation, lastDealtRound])
+
+  useEffect(() => {
+    const previousTrick = previousTrickRef.current
+    const previousIds = new Set(previousTrick.map((entry) => entry.card.id))
+    const newEntries = currentTrick.filter((entry) => !previousIds.has(entry.card.id))
+
+    if (newEntries.length) {
+      newEntries.forEach((entry) => {
+        const playerIndex = tablePlayers.findIndex((player) => player.id === entry.playerId)
+        const mapping = playerIndex >= 0 ? playerTargets[playerIndex] : null
+        const originPoint = mapping?.target ?? deckOrigin
+        const direction = mapping?.direction ?? 'top'
+        const tableCard = mapToTableCard(entry.card)
+        const flightId = `play-${entry.card.id}-${Date.now()}`
+
+        setPlayFlights((prev) => [
+          ...prev,
+          {
+            id: flightId,
+            direction,
+            origin: originPoint,
+            target: deckOrigin,
+            reveal: true,
+            revealDelay: 80,
+            cardRank: tableCard.rank,
+            cardSuit: tableCard.suit,
+          },
+        ])
+
+        const expiry = setTimeout(() => {
+          setPlayFlights((prevState) => prevState.filter((flight) => flight.id !== flightId))
+        }, 1000)
+        playTimeoutsRef.current.push(expiry)
+      })
+    }
+
+    previousTrickRef.current = currentTrick
+  }, [currentTrick, tablePlayers, playerTargets, deckOrigin])
 
   const canBid = showBidPanel && pendingAction === 'bid' && isMyTurn
   const isHandInteractive = phase === 'playing' && pendingAction === 'play' && isMyTurn
@@ -380,7 +501,37 @@ export default function GameTable({
 
         <FloatingCards cards={floatingCards} isMobile={isMobile} />
 
+        {!deckHidden && (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: deckVisualSize.width,
+              height: deckVisualSize.height,
+              transform: [{ translateX: deckTranslateX }, { translateY: deckTranslateY }, { scale: deckScale }],
+              opacity: deckOpacity,
+              zIndex: 5,
+            }}
+          >
+            <CenterDeck remainingCards={remainingCards} isAnimating={isDealing} />
+          </Animated.View>
+        )}
+
         {dealFlights.map((flight) => (
+          <CardFlight
+            key={flight.id}
+            direction={flight.direction}
+            origin={flight.origin}
+            target={flight.target}
+            isMobile={isMobile}
+            revealCard={flight.reveal}
+            revealDelay={flight.revealDelay}
+            cardRank={flight.cardRank}
+            cardSuit={flight.cardSuit}
+          />
+        ))}
+
+        {playFlights.map((flight) => (
           <CardFlight
             key={flight.id}
             direction={flight.direction}
@@ -449,11 +600,22 @@ export default function GameTable({
         ))}
 
         <YStack
-          gap="$3"
           ai="center"
-          style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+          position="absolute"
+          top="50%"
+          left="50%"
+          style={{ transform: 'translate(-50%, -50%)' }}
+          width={isMobile ? 220 : 320}
+          height={isMobile ? 220 : 320}
+          pointerEvents="none"
         >
-          <CenterDeck remainingCards={remainingCards} isAnimating={isDealing} />
+          {trickCards.length > 0 && (
+            <CenterPile
+              cards={trickCards}
+              cardSize={isMobile ? 'normal' : 'large'}
+              maxWidth={isMobile ? 180 : 280}
+            />
+          )}
         </YStack>
 
         {trumpCard && (
