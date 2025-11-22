@@ -330,7 +330,7 @@ export default function LandingScreen() {
 
     return ordered.map((player, index) => {
       const displayName = player.name ? player.name.toUpperCase() : `PLAYER ${index + 1}`
-      const baseCoins = 2_000_000 + index * 250_000
+      const baseCoins = 0
       const coinsBoost = Math.max(player.score, 0) * 10_000
       const visibleHandCount = player.id === currentPlayerId ? playerHand.length || player.handCount : player.handCount
 

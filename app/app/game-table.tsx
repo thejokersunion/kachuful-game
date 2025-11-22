@@ -3,6 +3,7 @@ import { Animated, Platform } from 'react-native'
 import * as ScreenOrientation from 'expo-screen-orientation'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Button, Paragraph, Stack, XStack, YStack } from 'tamagui'
+import { LogOut } from '@tamagui/lucide-icons'
 import { useResponsive } from '../hooks/useResponsive'
 import { ResponsiveContainer } from '../components/ResponsiveContainer'
 import { FloatingCards, type FloatingCardDecoration } from '../components/game-table/FloatingCards'
@@ -130,9 +131,9 @@ const ROUND_SUMMARY_DURATION_MS = 10_000
 const ROUND_SUMMARY_DURATION_SECONDS = Math.floor(ROUND_SUMMARY_DURATION_MS / 1000)
 
 const defaultPlayers: TablePlayer[] = [
-  { id: '1', displayName: 'GUEST001', coins: 3_500_000, avatar: '🎮', isCurrentTurn: true, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: true, isSelf: true },
-  { id: '2', displayName: 'GUEST689', coins: 5_500_000, avatar: '👨', isCurrentTurn: false, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: false, isSelf: false },
-  { id: '3', displayName: 'GUEST391', coins: 9_100_000, avatar: '👩', isCurrentTurn: false, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: false, isSelf: false },
+  { id: '1', displayName: 'GUEST001', coins: 0, avatar: '🎮', isCurrentTurn: true, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: true, isSelf: true },
+  { id: '2', displayName: 'GUEST689', coins: 0, avatar: '👨', isCurrentTurn: false, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: false, isSelf: false },
+  { id: '3', displayName: 'GUEST391', coins: 0, avatar: '👩', isCurrentTurn: false, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: false, isSelf: false },
 ]
 
 function mapToTableCard(card: EngineCard): TableCard {
@@ -802,8 +803,9 @@ export default function GameTable({
               hoverStyle={{ scale: 1.02 }}
               animation="bouncy"
               alignSelf="flex-start"
+              aria-label="Leave Game"
             >
-              Leave Game
+              <LogOut size={isMobile ? 18 : 22} />
             </Button>
           )}
         </XStack>
