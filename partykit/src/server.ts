@@ -667,11 +667,12 @@ export default class CardMastersServer implements Party.Server {
       if (!view) {
         return
       }
-      this.sendHandToPlayer(player.id, view.cards as PlayingCard[])
+      const playableCardIds = this.getPlayableCardIds(player.id)
+      this.sendHandToPlayer(player.id, view.cards as PlayingCard[], playableCardIds)
     })
   }
 
-  private sendHandToPlayer(playerId: string, cards: PlayingCard[]) {
+  private sendHandToPlayer(playerId: string, cards: PlayingCard[], playableCardIds: string[]) {
     const conn = this.room.getConnection(playerId)
     if (!conn) {
       return
@@ -679,9 +680,34 @@ export default class CardMastersServer implements Party.Server {
 
     this.sendToConnection(conn, {
       type: 'hand_update',
-      payload: { playerId, cards },
+      payload: { playerId, cards, playableCardIds },
       timestamp: Date.now(),
     })
+  }
+
+  private getPlayableCardIds(playerId: string): string[] {
+    if (!this.engine) {
+      return []
+    }
+
+    const snapshot = this.engine.getSnapshot(playerId)
+    const viewer = snapshot.players.find(player => player.id === playerId)
+    if (!viewer || !viewer.cards.length) {
+      return []
+    }
+
+    const allCards = viewer.cards.map(card => card.id)
+    if (snapshot.phase !== 'playing' || snapshot.pendingPlayerId !== playerId) {
+      return allCards
+    }
+
+    const leadSuit = snapshot.currentTrick[0]?.card.suit
+    if (!leadSuit) {
+      return allCards
+    }
+
+    const suitMatches = viewer.cards.filter(card => card.suit === leadSuit).map(card => card.id)
+    return suitMatches.length > 0 ? suitMatches : allCards
   }
 
   /**

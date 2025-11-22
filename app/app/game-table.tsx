@@ -1,221 +1,196 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Button, Paragraph, Stack, XStack, YStack } from 'tamagui'
+import { Button, Paragraph, Stack, YStack } from 'tamagui'
 import { useResponsive } from '../hooks/useResponsive'
 import { ResponsiveContainer } from '../components/ResponsiveContainer'
-import { CardFlight } from '../components/game-table/CardFlight'
-import { CenterDeck } from '../components/game-table/CenterDeck'
 import { FloatingCards, type FloatingCardDecoration } from '../components/game-table/FloatingCards'
 import { PlayerBadge } from '../components/game-table/PlayerBadge'
 import { PlayerHand } from '../components/game-table/PlayerHand'
 import { TrumpCardSpotlight } from '../components/game-table/TrumpCardSpotlight'
-import { getDeckOrigin, type Point2D } from '../components/game-table/animationTargets'
-import { getPlayerDirection, getPlayerPosition, getPlayerTargetPoint, getTrumpTargetPoint, type PlayerDirection } from '../components/game-table/playerLayout'
-import type { PlayingCard, TablePlayer } from '../components/game-table/types'
+import { CenterDeck } from '../components/game-table/CenterDeck'
+import { getPlayerPosition } from '../components/game-table/playerLayout'
+import type { PlayingCard as TableCard, TablePlayer } from '../components/game-table/types'
+import type { PlayingCard as EngineCard, PendingAction, RoundPhase, Suit, TrickView } from '../types/game'
 import type { GameCardSize } from '../components/game-table/GameCard'
+import { BidPanel } from '../components/game-table/BidPanel'
+import { TrickStatus } from '../components/game-table/TrickStatus'
+import { HandToolbar } from '../components/game-table/HandToolbar'
 
 interface GameTableProps {
   players?: TablePlayer[]
   playerCount?: number
   maxPlayers?: number
+  hand?: EngineCard[]
   onLeaveGame?: () => void
+  round?: number
+  phase?: RoundPhase
+  pendingAction?: PendingAction
+  trump?: Suit | null
+  currentTrick?: TrickView[]
+  lastTrickWinner?: string | null
+  deckCount?: number
+  myBid?: number | null
+  myTricksWon?: number
+  isMyTurn?: boolean
+  handSize?: number
+  onSubmitBid?: (bid: number) => void
+  onPlayCard?: (cardId: string) => void
+  playableCardIds?: string[]
 }
 
-export default function GameTable({ players: providedPlayers, playerCount, maxPlayers, onLeaveGame }: GameTableProps = {}) {
+const RANK_LABEL: Record<number, TableCard['rank']> = {
+  2: '2',
+  3: '3',
+  4: '4',
+  5: '5',
+  6: '6',
+  7: '7',
+  8: '8',
+  9: '9',
+  10: '10',
+  11: 'J',
+  12: 'Q',
+  13: 'K',
+  14: 'A',
+}
+
+const SUIT_GLYPH: Record<Suit, TableCard['suit']> = {
+  clubs: '♣',
+  diamonds: '♦',
+  hearts: '♥',
+  spades: '♠',
+}
+
+const fallbackHand: TableCard[] = [
+  { suit: '♠', rank: 'A', id: 'sample-1' },
+  { suit: '♠', rank: '4', id: 'sample-2' },
+  { suit: '♠', rank: 'J', id: 'sample-3' },
+  { suit: '♠', rank: 'K', id: 'sample-4' },
+  { suit: '♦', rank: 'Q', id: 'sample-5' },
+]
+
+const floatingCards: FloatingCardDecoration[] = [
+  { suit: '♣', rank: 'A', id: 'fc1', top: '5%', right: '10%', rotation: 15 },
+  { suit: '♦', rank: 'K', id: 'fc2', top: '8%', right: '25%', rotation: -20 },
+  { suit: '♥', rank: 'Q', id: 'fc3', top: '3%', left: '15%', rotation: 25 },
+]
+
+const defaultPlayers: TablePlayer[] = [
+  { id: '1', displayName: 'GUEST001', coins: 3_500_000, avatar: '🎮', isCurrentTurn: true, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: true, isSelf: true },
+  { id: '2', displayName: 'GUEST689', coins: 5_500_000, avatar: '👨', isCurrentTurn: false, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: false, isSelf: false },
+  { id: '3', displayName: 'GUEST391', coins: 9_100_000, avatar: '👩', isCurrentTurn: false, bid: null, tricksWon: 0, status: 'connected', score: 0, handCount: 5, isHost: false, isSelf: false },
+]
+
+function mapToTableCard(card: EngineCard): TableCard {
+  const rank = RANK_LABEL[card.rank] ?? 'A'
+  const suit = (card.symbol as TableCard['suit']) ?? SUIT_GLYPH[card.suit]
+  return { id: card.id, rank, suit }
+}
+
+export default function GameTable({
+  players: providedPlayers,
+  playerCount,
+  maxPlayers,
+  hand,
+  onLeaveGame,
+  round = 1,
+  phase = 'idle',
+  pendingAction = 'none',
+  trump = null,
+  currentTrick = [],
+  lastTrickWinner = null,
+  deckCount = 0,
+  myBid = null,
+  myTricksWon = 0,
+  isMyTurn = false,
+  handSize = 0,
+  onSubmitBid,
+  onPlayCard,
+  playableCardIds,
+}: GameTableProps = {}) {
   const { width, height, isMobile, isTablet } = useResponsive()
 
-  const defaultPlayers = useMemo<TablePlayer[]>(
-    () => [
-      { id: '1', displayName: 'GUEST001', coins: 3_500_000, avatar: '🎮', isCurrentTurn: true },
-      { id: '2', displayName: 'GUEST689', coins: 5_500_000, avatar: '👨', isCurrentTurn: false },
-      { id: '3', displayName: 'GUEST391', coins: 9_100_000, avatar: '👩', isCurrentTurn: false },
-      { id: '4', displayName: 'GUEST252', coins: 6_900_000, avatar: '👴', isCurrentTurn: false },
-      { id: '5', displayName: 'GUEST258', coins: 6_900_000, avatar: '👧', isCurrentTurn: false },
-    ],
-    []
-  )
-
   const tablePlayers = providedPlayers && providedPlayers.length > 0 ? providedPlayers : defaultPlayers
+  const tableHand = useMemo<TableCard[]>(() => {
+    if (hand && hand.length > 0) {
+      return hand.map(mapToTableCard)
+    }
+    return fallbackHand
+  }, [hand])
 
-  const playerHand = useMemo<PlayingCard[]>(
-    () => [
-      { suit: '♠', rank: 'A', id: 'c1' },
-      { suit: '♠', rank: '4', id: 'c2' },
-      { suit: '♠', rank: 'J', id: 'c3' },
-      { suit: '♠', rank: 'K', id: 'c4' },
-      { suit: '♦', rank: 'Q', id: 'c5' },
-    ],
-    []
-  )
+  const playableSet = useMemo(() => {
+    if (!playableCardIds) return null
+    return new Set(playableCardIds)
+  }, [playableCardIds])
 
-  const floatingCards = useMemo<FloatingCardDecoration[]>(
-    () => [
-      { suit: '♣', rank: 'A', id: 'fc1', top: '5%', right: '10%', rotation: 15 },
-      { suit: '♦', rank: 'K', id: 'fc2', top: '8%', right: '25%', rotation: -20 },
-      { suit: '♥', rank: 'Q', id: 'fc3', top: '3%', left: '15%', rotation: 25 },
-    ],
-    []
-  )
-
-  const trumpCard = useMemo<PlayingCard>(() => ({ suit: '♠', rank: 'A', id: 'trump' }), [])
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set())
-  const [dealtCounts, setDealtCounts] = useState<Record<string, number>>({})
-  const [isTrumpRevealed, setIsTrumpRevealed] = useState(false)
-  type ActiveFlight = {
-    id: string
-    playerId: string
-    direction: PlayerDirection
-    target: Point2D
-  }
 
-  const [activeFlights, setActiveFlights] = useState<ActiveFlight[]>([])
+  useEffect(() => {
+    setSelectedCards((prev) => {
+      const permitted = new Set(tableHand.map((card) => card.id))
+      const retained = Array.from(prev).filter((id) => permitted.has(id))
+      return new Set(retained)
+    })
+  }, [tableHand])
 
   const toggleCardSelection = (cardId: string) => {
+    if (playableSet && !playableSet.has(cardId)) {
+      return
+    }
+
     setSelectedCards((prev) => {
-      const next = new Set(prev)
-      if (next.has(cardId)) {
+      if (prev.has(cardId)) {
+        const next = new Set(prev)
         next.delete(cardId)
-      } else {
-        next.add(cardId)
+        return next
       }
-      return next
+      return new Set([cardId])
     })
   }
+
+  const selectedCardId = useMemo(() => {
+    const iterator = selectedCards.values().next()
+    return iterator.done ? null : iterator.value
+  }, [selectedCards])
 
   const cardSize: GameCardSize = isMobile ? 'normal' : isTablet ? 'normal' : 'large'
 
   const currentPlayer = tablePlayers[0]
   const otherPlayers = currentPlayer ? tablePlayers.slice(1) : []
 
-  const playerDirections = useMemo<Record<string, PlayerDirection>>(
-    () =>
-      tablePlayers.reduce((acc, player, index) => {
-        acc[player.id] = getPlayerDirection(index, tablePlayers.length)
-        return acc
-      }, {} as Record<string, PlayerDirection>),
-    [tablePlayers]
+  const remainingCards = deckCount
+
+  const trumpCard = useMemo(() => {
+    if (!trump) return null
+    return {
+      id: `trump-${trump}`,
+      suit: SUIT_GLYPH[trump],
+      rank: 'A',
+    } as TableCard
+  }, [trump])
+
+  const trumpTarget = useMemo(() => {
+    const padding = isMobile ? 80 : 120
+    return { x: width - padding, y: padding }
+  }, [width, isMobile])
+
+  const canBid = phase === 'bidding' && pendingAction === 'bid' && isMyTurn
+  const isHandInteractive = phase === 'playing' && pendingAction === 'play' && isMyTurn
+  const canPlayCard = Boolean(
+    selectedCardId &&
+      phase === 'playing' &&
+      pendingAction === 'play' &&
+      isMyTurn &&
+      (!playableSet || playableSet.has(selectedCardId))
   )
 
-  const deckOrigin = useMemo(() => getDeckOrigin(width, height), [width, height])
-  const trumpTarget = useMemo(() => getTrumpTargetPoint(width, height, isMobile), [width, height, isMobile])
+  const handlePlay = () => {
+    if (!selectedCardId) return
+    onPlayCard?.(selectedCardId)
+    setSelectedCards(new Set())
+  }
 
-  const playerTargets = useMemo<Record<string, Point2D>>(
-    () =>
-      tablePlayers.reduce((acc, player, index) => {
-        acc[player.id] = getPlayerTargetPoint(index, tablePlayers.length, width, height, isMobile)
-        return acc
-      }, {} as Record<string, Point2D>),
-    [tablePlayers, width, height, isMobile]
-  )
-
-  useEffect(() => {
-    setDealtCounts(
-      tablePlayers.reduce((acc, player) => {
-        acc[player.id] = 0
-        return acc
-      }, {} as Record<string, number>)
-    )
-  }, [tablePlayers])
-
-  useEffect(() => {
-    if (tablePlayers.length === 0) {
-      setIsTrumpRevealed(false)
-      setActiveFlights([])
-      return
-    }
-
-    setIsTrumpRevealed(false)
-    const totalDeals = tablePlayers.length * 5
-    const travelDuration = isMobile ? 360 : 440
-    let cancelled = false
-    let flightTimer: ReturnType<typeof setTimeout> | null = null
-    let delayTimer: ReturnType<typeof setTimeout> | null = null
-    let dealIndex = 0
-    let trumpFlightStarted = false
-
-    const startTrumpFlight = () => {
-      if (cancelled || trumpFlightStarted) return
-      trumpFlightStarted = true
-      const dealId = 'trump-flight'
-      setActiveFlights((prev) => [
-        ...prev.filter((flight) => flight.id !== dealId),
-        {
-          id: dealId,
-          playerId: 'TRUMP',
-          direction: 'trump',
-          target: trumpTarget,
-        },
-      ])
-
-      flightTimer = setTimeout(() => {
-        if (cancelled) {
-          return
-        }
-        setActiveFlights((prev) => prev.filter((flight) => flight.id !== dealId))
-        setIsTrumpRevealed(true)
-      }, travelDuration)
-    }
-
-    const tick = () => {
-      if (cancelled) {
-        return
-      }
-
-      if (dealIndex >= totalDeals) {
-        startTrumpFlight()
-        return
-      }
-
-      const targetPlayer = tablePlayers[dealIndex % tablePlayers.length]
-      const direction = playerDirections[targetPlayer.id] ?? 'top'
-      const dealId = `${targetPlayer.id}-${dealIndex}`
-      const targetPoint = playerTargets[targetPlayer.id] ?? deckOrigin
-
-      setActiveFlights((prev) => [...prev.filter((flight) => flight.id !== dealId), { id: dealId, playerId: targetPlayer.id, direction, target: targetPoint }])
-
-      flightTimer = setTimeout(() => {
-        if (cancelled) {
-          return
-        }
-        setDealtCounts((prev) => ({
-          ...prev,
-          [targetPlayer.id]: Math.min((prev[targetPlayer.id] ?? 0) + 1, 5),
-        }))
-        setActiveFlights((prev) => prev.filter((flight) => flight.id !== dealId))
-        dealIndex += 1
-        delayTimer = setTimeout(tick, 140)
-      }, travelDuration)
-    }
-
-    tick()
-
-    return () => {
-      cancelled = true
-      if (flightTimer) clearTimeout(flightTimer)
-      if (delayTimer) clearTimeout(delayTimer)
-      setIsTrumpRevealed(false)
-      setActiveFlights([])
-    }
-  }, [tablePlayers, playerDirections, playerTargets, deckOrigin, isMobile, trumpTarget])
-
-  const visibleHandCount = currentPlayer ? Math.min(playerHand.length, dealtCounts[currentPlayer.id] ?? 0) : 0
-  const visibleHand = useMemo<PlayingCard[]>(
-    () => (currentPlayer ? playerHand.slice(0, visibleHandCount) : []),
-    [playerHand, visibleHandCount, currentPlayer]
-  )
-
-  useEffect(() => {
-    setSelectedCards((prev) => {
-      const allowedIds = new Set(visibleHand.map((card) => card.id))
-      const filtered = new Set(Array.from(prev).filter((id) => allowedIds.has(id)))
-      return filtered.size === prev.size ? prev : filtered
-    })
-  }, [visibleHand])
-
-  const totalDealsNeeded = tablePlayers.length * 5 + 1
-  const totalDealt = tablePlayers.reduce((sum, player) => sum + (dealtCounts[player.id] ?? 0), 0)
-  const dealtWithTrump = totalDealt + (isTrumpRevealed ? 1 : 0)
-  const remainingCards = Math.max(totalDealsNeeded - dealtWithTrump - activeFlights.length, 0)
+  const handleClearSelection = () => setSelectedCards(new Set())
 
   const displayPlayerCount = playerCount ?? tablePlayers.length
   const displayMaxPlayers = maxPlayers ?? Math.max(tablePlayers.length, displayPlayerCount, 1)
@@ -224,7 +199,7 @@ export default function GameTable({ players: providedPlayers, playerCount, maxPl
     <ResponsiveContainer bg="$background" overflow="hidden">
       <Stack flex={1} position="relative" overflow="hidden">
         <LinearGradient
-          colors={['#2563EB', '#1E40AF', '#1E3A8A']}
+          colors={['#141332', '#10152E', '#0F172A']}
           start={[0, 0]}
           end={[1, 1]}
           style={{ flex: 1, position: 'absolute', width: '100%', height: '100%' }}
@@ -277,69 +252,97 @@ export default function GameTable({ players: providedPlayers, playerCount, maxPl
           </YStack>
         )}
 
+        <YStack
+          position="absolute"
+          top={isMobile ? 120 : 140}
+          left={isMobile ? '$3' : '$4'}
+          right={isMobile ? '$3' : '$4'}
+        >
+          <TrickStatus
+            players={tablePlayers}
+            currentTrick={currentTrick}
+            trump={trump}
+            phase={phase}
+            pendingAction={pendingAction}
+            round={round}
+            lastTrickWinner={lastTrickWinner}
+          />
+        </YStack>
+
         {otherPlayers.map((player, idx) => (
           <PlayerBadge
             key={player.id}
             player={player}
             isMobile={isMobile}
             placementStyle={getPlayerPosition(idx + 1, tablePlayers.length, width, height, isMobile)}
-            dealtCount={dealtCounts[player.id] ?? 0}
+            dealtCount={player.handCount}
           />
         ))}
 
-        {/* Center playing area */}
         <YStack
           gap="$3"
           ai="center"
           style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
         >
-          <CenterDeck remainingCards={remainingCards} isAnimating={activeFlights.length > 0} />
+          <CenterDeck remainingCards={remainingCards} isAnimating={false} />
         </YStack>
 
-        {activeFlights.map((flight) => (
-          <CardFlight
-            key={flight.id}
-            direction={flight.direction}
-            origin={deckOrigin}
-            target={flight.target}
+        {trumpCard && (
+          <TrumpCardSpotlight
+            card={trumpCard}
             isMobile={isMobile}
+            position={trumpTarget}
+            isVisible={Boolean(trump)}
           />
-        ))}
+        )}
 
         <YStack
           position="absolute"
-          bottom={0}
-          left={0}
-          right={0}
-          paddingVertical={isMobile ? '$2' : '$3'}
-          paddingHorizontal={isMobile ? '$3' : '$4'}
+          bottom={isMobile ? '$4' : '$5'}
+          left={isMobile ? '$3' : '$4'}
+          right={isMobile ? '$3' : '$4'}
+          gap="$3"
         >
-          <XStack jc="space-between" ai="flex-end" gap="$3">
-            {currentPlayer && (
-              <PlayerBadge
-                player={currentPlayer}
-                isMobile={isMobile}
-                variant="inline"
-                dealtCount={dealtCounts[currentPlayer.id] ?? 0}
-              />
-            )}
-            <YStack flex={0} width={isMobile ? 40 : 48} />
-          </XStack>
+          {currentPlayer && (
+            <PlayerBadge
+              player={currentPlayer}
+              isMobile={isMobile}
+              variant="inline"
+              dealtCount={currentPlayer.handCount}
+            />
+          )}
+
+          <BidPanel
+            handSize={handSize}
+            phase={phase}
+            currentBid={myBid}
+            canBid={canBid}
+            pendingAction={pendingAction}
+            round={round}
+            onBid={(amount) => onSubmitBid?.(amount)}
+          />
+
+          <HandToolbar
+            selectedCardId={selectedCardId}
+            onPlay={handlePlay}
+            onClear={handleClearSelection}
+            canPlay={canPlayCard}
+            phase={phase}
+            pendingAction={pendingAction}
+            isMyTurn={isMyTurn}
+            handCount={tableHand.length}
+            myBid={myBid}
+            tricksWon={myTricksWon ?? 0}
+          />
         </YStack>
 
         <PlayerHand
-          cards={visibleHand}
+          cards={tableHand}
           selectedCards={selectedCards}
           onToggle={toggleCardSelection}
           cardSize={cardSize}
-          bottomOffset={isMobile ? 10 : 15}
-        />
-
-        <TrumpCardSpotlight
-          card={trumpCard}
-          isMobile={isMobile}
-          position={trumpTarget}
-          isVisible={isTrumpRevealed}
+          bottomOffset={isMobile ? 210 : 230}
+          isInteractive={isHandInteractive}
         />
       </Stack>
     </ResponsiveContainer>

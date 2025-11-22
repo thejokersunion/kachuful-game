@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button, Card, H2, H3, Input, Paragraph, XStack, YStack, Separator, Spinner, ScrollView, Circle } from 'tamagui'
 import { Users, Play, Crown, UserX, Copy, LogOut, Check, AlertCircle, Link as LinkIcon } from '@tamagui/lucide-icons'
 import * as Clipboard from 'expo-clipboard'
 import * as Linking from 'expo-linking'
+import { useToastController } from '@tamagui/toast'
 import { ResponsiveContainer } from 'components/ResponsiveContainer'
 import { GameHeader } from 'components/GameHeader'
 import { useGameClient } from 'utils/gameClient'
 import { useResponsive, useResponsiveIconSize } from 'hooks/useResponsive'
-import type { GameState, Player, LobbyInfo } from 'types/game'
+import type { GameState, Player, LobbyInfo, PlayingCard as EngineCard, HandUpdatePayload } from 'types/game'
 import { useRouter } from 'expo-router'
 import GameTable from './game-table'
 import type { TablePlayer } from 'components/game-table/types'
@@ -30,12 +31,16 @@ export default function LandingScreen() {
   const [lobbyCode, setLobbyCode] = useState('')
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [currentPlayerId, setCurrentPlayerId] = useState('')
+  const [playerHand, setPlayerHand] = useState<EngineCard[]>([])
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [copiedCode, setCopiedCode] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
   const [isCodeFromLink, setIsCodeFromLink] = useState(false)
+  const [serverPlayableCardIds, setServerPlayableCardIds] = useState<string[]>([])
+  const [celebrationState, setCelebrationState] = useState<{ round: number; triggered: boolean }>({ round: 0, triggered: false })
+  const toast = useToastController()
 
   // Handle deep links
   useEffect(() => {
@@ -69,6 +74,8 @@ export default function LandingScreen() {
     leaveLobby, 
     startGame, 
     kickPlayer, 
+    playCard, 
+    submitBid, 
     on, 
     off 
   } = useGameClient(PARTYKIT_HOST, roomId)
@@ -134,7 +141,9 @@ export default function LandingScreen() {
         handSequence: [],
       })
 
+      setPlayerHand([])
       setIsLoading(false)
+      setServerPlayableCardIds([])
       setSuccessMessage('Lobby created successfully!')
       setTimeout(() => setSuccessMessage(''), 3000)
       setMode('lobby')
@@ -156,6 +165,9 @@ export default function LandingScreen() {
         }
       }
       setIsLoading(false)
+      setPlayerHand([])
+      setServerPlayableCardIds([])
+      setCelebrationState({ round: 0, triggered: false })
       setSuccessMessage('Joined lobby successfully!')
       setTimeout(() => setSuccessMessage(''), 3000)
       setMode('lobby')
@@ -166,6 +178,25 @@ export default function LandingScreen() {
       setGameState(state)
       if (state.status === 'playing' && mode === 'lobby') {
         setMode('game')
+      }
+    }
+
+    const handleHandUpdate = (data: unknown) => {
+      const payload = data as HandUpdatePayload
+      if (!payload || !Array.isArray(payload.cards)) {
+        return
+      }
+
+      if (!currentPlayerId) {
+        setCurrentPlayerId(payload.playerId)
+      }
+
+      if (!currentPlayerId || payload.playerId === currentPlayerId) {
+        setPlayerHand(payload.cards as EngineCard[])
+        const playableIds = Array.isArray(payload.playableCardIds)
+          ? payload.playableCardIds.filter(id => payload.cards.some(card => card.id === id))
+          : []
+        setServerPlayableCardIds(playableIds)
       }
     }
 
@@ -194,6 +225,7 @@ export default function LandingScreen() {
     on('lobby_created', handleLobbyCreated)
     on('lobby_joined', handleLobbyJoined)
     on('game_state', handleGameState)
+    on('hand_update', handleHandUpdate)
     on('player_kicked', handlePlayerKicked)
     on('error', handleError)
 
@@ -202,6 +234,7 @@ export default function LandingScreen() {
       off('lobby_created', handleLobbyCreated)
       off('lobby_joined', handleLobbyJoined)
       off('game_state', handleGameState)
+      off('hand_update', handleHandUpdate)
       off('player_kicked', handlePlayerKicked)
       off('error', handleError)
     }
@@ -213,6 +246,10 @@ export default function LandingScreen() {
     setGameState(null)
     setLobbyCode('')
     setError('')
+    setPlayerHand([])
+    setCelebrationState({ round: 0, triggered: false })
+    setServerPlayableCardIds([])
+    setCelebrationState({ round: 0, triggered: false })
     setIsLoading(false)
   }
 
@@ -296,15 +333,128 @@ export default function LandingScreen() {
       const displayName = player.name ? player.name.toUpperCase() : `PLAYER ${index + 1}`
       const baseCoins = 2_000_000 + index * 250_000
       const coinsBoost = Math.max(player.score, 0) * 10_000
+      const visibleHandCount = player.id === currentPlayerId ? playerHand.length || player.handCount : player.handCount
+
       return {
         id: player.id,
         avatar: player.avatar ?? getFallbackAvatar(index),
         displayName,
         coins: baseCoins + coinsBoost,
         isCurrentTurn: gameState.currentTurn ? player.id === gameState.currentTurn : player.id === currentPlayerId,
+        bid: gameState.bids[player.id] ?? player.bid ?? null,
+        tricksWon: gameState.tricksWon[player.id] ?? player.tricksWon ?? 0,
+        score: player.score,
+        status: player.status,
+        handCount: visibleHandCount,
+        isHost: player.isHost,
+        isSelf: player.id === currentPlayerId,
       }
     })
+  }, [gameState, currentPlayerId, playerHand])
+
+  const myPlayer = useMemo(() => {
+    if (!gameState || !currentPlayerId) {
+      return null
+    }
+    return gameState.players.find(player => player.id === currentPlayerId) ?? null
   }, [gameState, currentPlayerId])
+
+  const myBid = useMemo(() => {
+    if (!currentPlayerId || !gameState) {
+      return null
+    }
+    if (gameState.bids[currentPlayerId] !== undefined) {
+      return gameState.bids[currentPlayerId]
+    }
+    return myPlayer?.bid ?? null
+  }, [currentPlayerId, gameState, myPlayer])
+
+  const myTricksWon = useMemo(() => {
+    if (!currentPlayerId || !gameState) {
+      return 0
+    }
+    if (gameState.tricksWon[currentPlayerId] !== undefined) {
+      return gameState.tricksWon[currentPlayerId] ?? 0
+    }
+    return myPlayer?.tricksWon ?? 0
+  }, [currentPlayerId, gameState, myPlayer])
+
+  const isMyTurn = Boolean(gameState?.currentTurn && gameState.currentTurn === currentPlayerId)
+
+  const fallbackPlayableCardIds = useMemo(() => {
+    if (!playerHand.length) {
+      return []
+    }
+
+    if (!gameState || gameState.phase !== 'playing') {
+      return playerHand.map(card => card.id)
+    }
+
+    const leadSuit = gameState.currentTrick[0]?.card.suit
+    if (!leadSuit) {
+      return playerHand.map(card => card.id)
+    }
+
+    const hasLeadSuit = playerHand.some(card => card.suit === leadSuit)
+    if (!hasLeadSuit) {
+      return playerHand.map(card => card.id)
+    }
+
+    return playerHand.filter(card => card.suit === leadSuit).map(card => card.id)
+  }, [playerHand, gameState])
+
+  const playableCardIds = useMemo(() => {
+    if (serverPlayableCardIds.length > 0) {
+      const allowed = new Set(playerHand.map(card => card.id))
+      return serverPlayableCardIds.filter(id => allowed.has(id))
+    }
+    return fallbackPlayableCardIds
+  }, [serverPlayableCardIds, playerHand, fallbackPlayableCardIds])
+
+  useEffect(() => {
+    if (!gameState) {
+      return
+    }
+    setCelebrationState(prev => (prev.round === gameState.round ? prev : { round: gameState.round, triggered: false }))
+  }, [gameState?.round])
+
+  useEffect(() => {
+    if (!gameState || celebrationState.triggered || !toast) {
+      return
+    }
+    if (gameState.phase === 'bidding') {
+      return
+    }
+    if (myBid === null) {
+      return
+    }
+
+    const metPositiveBid = myBid > 0 && myTricksWon >= myBid
+    const metZeroBid = myBid === 0 && ['round_end', 'completed', 'scoring'].includes(gameState.phase) && myTricksWon === 0
+    if (!metPositiveBid && !metZeroBid) {
+      return
+    }
+
+    toast.show('Contract Secured!', {
+      message: myBid === 0 ? 'You dodged every trick for a perfect zero bid.' : `You hit ${myBid} ${myBid === 1 ? 'trick' : 'tricks'}!`,
+      duration: 4000,
+    })
+    setCelebrationState(prev => ({ ...prev, triggered: true }))
+  }, [gameState, myBid, myTricksWon, celebrationState.triggered, toast])
+
+  const handleSubmitBid = useCallback((amount: number) => {
+    if (Number.isNaN(amount) || amount < 0) {
+      return
+    }
+    submitBid(amount)
+  }, [submitBid])
+
+  const handlePlayCard = useCallback((cardId: string) => {
+    if (!cardId) {
+      return
+    }
+    playCard(cardId)
+  }, [playCard])
 
   // Home Screen
   if (mode === 'home') {
@@ -717,6 +867,21 @@ export default function LandingScreen() {
         players={tablePlayers.length ? tablePlayers : undefined}
         playerCount={gameState.players.length}
         maxPlayers={gameState.maxPlayers}
+        hand={playerHand}
+        round={gameState.round}
+        phase={gameState.phase}
+        pendingAction={gameState.pendingAction}
+        trump={gameState.trump}
+        currentTrick={gameState.currentTrick}
+        lastTrickWinner={gameState.lastTrickWinner}
+        deckCount={gameState.deckCount}
+        myBid={myBid}
+        myTricksWon={myTricksWon}
+        isMyTurn={isMyTurn}
+        handSize={gameState.handSize}
+        onSubmitBid={handleSubmitBid}
+        onPlayCard={handlePlayCard}
+        playableCardIds={playableCardIds}
         onLeaveGame={handleLeaveLobby}
       />
     )

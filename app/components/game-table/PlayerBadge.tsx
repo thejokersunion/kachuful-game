@@ -14,6 +14,9 @@ interface PlayerBadgeProps {
 function Component({ player, isMobile, placementStyle, variant = 'overlay', dealtCount = 0 }: PlayerBadgeProps) {
   const avatarSize = isMobile ? 36 : 48
 
+  const statusColor = player.status === 'connected' || player.status === 'playing' ? '#34D399' : '#FBBF24'
+  const bidLabel = player.bid ?? '—'
+
   return (
     // @ts-ignore - Tamagui props
     <XStack
@@ -73,40 +76,96 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
       </YStack>
 
       <YStack gap="$1" flex={1}>
-        <Text
-          style={{
-            color: 'white',
-            textShadowColor: 'rgba(0, 0, 0, 0.5)',
-            textShadowOffset: { width: 0, height: 1 },
-            textShadowRadius: 2,
-          }}
-          fontSize={isMobile ? 11 : 13}
-          fontWeight="700"
-          letterSpacing={0.3}
-        >
-          {player.displayName}
-        </Text>
-        {/* @ts-ignore - Tamagui props */}
+        <XStack ai="center" gap="$1">
+          <Text
+            style={{
+              color: 'white',
+              textShadowColor: 'rgba(0, 0, 0, 0.5)',
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: 2,
+            }}
+            fontSize={isMobile ? 11 : 13}
+            fontWeight="700"
+            letterSpacing={0.3}
+          >
+            {player.displayName}
+          </Text>
+          {player.isSelf && (
+            <Text color="#FBBF24" fontSize={10} fontWeight="700">
+              (You)
+            </Text>
+          )}
+          {player.isHost && (
+            <Text color="#FDE68A" fontSize={10} fontWeight="700">
+              HOST
+            </Text>
+          )}
+        </XStack>
+        {/* @ts-ignore */}
+        <XStack gap="$2" ai="center">
+          <XStack ai="center" gap="$1" bg="rgba(16,185,129,0.15)" px="$1.5" py="$0.5" br="$2">
+            <Circle size={8} bg={statusColor} />
+            <Text color="#34D399" fontSize={10} fontWeight="700">
+              {player.status === 'disconnected' ? 'Away' : 'Ready'}
+            </Text>
+          </XStack>
+          <XStack ai="center" gap="$1" bg="rgba(245,158,11,0.15)" px="$1.5" py="$0.5" br="$2">
+            <Text color="#FBBF24" fontSize={10} fontWeight="700">
+              Score {player.score}
+            </Text>
+          </XStack>
+        </XStack>
+        {/* @ts-ignore */}
+        <XStack gap="$2" ai="center" mt="$1">
+          <YStack gap="$0.5">
+            <Text color="rgba(255,255,255,0.65)" fontSize={10}>
+              Bid
+            </Text>
+            <Text color={player.bid !== null ? '#FBBF24' : 'rgba(255,255,255,0.4)'} fontSize={14} fontWeight="800">
+              {bidLabel}
+            </Text>
+          </YStack>
+          <YStack gap="$0.5">
+            <Text color="rgba(255,255,255,0.65)" fontSize={10}>
+              Tricks
+            </Text>
+            <Text color="#34D399" fontSize={14} fontWeight="800">
+              {player.tricksWon}
+            </Text>
+          </YStack>
+          {typeof dealtCount === 'number' && dealtCount >= 0 && (
+            <YStack gap="$0.5">
+              <Text color="rgba(255,255,255,0.65)" fontSize={10}>
+                Cards
+              </Text>
+              <Text color="rgba(255,255,255,0.85)" fontSize={14} fontWeight="800">
+                {dealtCount}
+              </Text>
+            </YStack>
+          )}
+        </XStack>
+        {/* Coins */}
+        {/* @ts-ignore */}
         <XStack
           gap="$1"
           ai="center"
-          bg="rgba(245, 158, 11, 0.15)"
+          justifyContent="flex-start"
+          bg="rgba(15,118,110,0.35)"
           py="$0.5"
           px="$1.5"
           br="$2"
         >
           <Circle
             size={isMobile ? 10 : 12}
-            bg="#F59E0B"
-            shadowColor="#F59E0B"
+            bg="#0D9488"
+            shadowColor="#14B8A6"
             shadowRadius={3}
             shadowOpacity={0.6}
-            style={{ backgroundImage: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)', backgroundColor: '#F59E0B' }}
           />
           <Text
             style={{
-              color: '#FBBF24',
-              textShadowColor: 'rgba(245, 158, 11, 0.5)',
+              color: '#5EEAD4',
+              textShadowColor: 'rgba(14,165,233,0.5)',
               textShadowOffset: { width: 0, height: 1 },
               textShadowRadius: 2,
             }}
@@ -117,23 +176,6 @@ function Component({ player, isMobile, placementStyle, variant = 'overlay', deal
             {formatCoins(player.coins)}
           </Text>
         </XStack>
-        {dealtCount > 0 && (
-          // @ts-ignore - Tamagui props
-          <XStack gap={isMobile ? '$0.5' : '$1'} mt="$1">
-            {Array.from({ length: dealtCount }).map((_, idx) => (
-              <YStack
-                key={idx}
-                width={isMobile ? 8 : 10}
-                height={isMobile ? 14 : 18}
-                bg="rgba(255, 255, 255, 0.25)"
-                br="$1"
-                shadowColor="#000"
-                shadowOpacity={0.2}
-                shadowRadius={2}
-              />
-            ))}
-          </XStack>
-        )}
       </YStack>
     </XStack>
   )

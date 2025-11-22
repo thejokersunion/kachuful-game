@@ -89,6 +89,7 @@ export interface ClientMessage {
 export interface HandUpdatePayload {
   playerId: string
   cards: PlayingCard[]
+  playableCardIds?: string[]
 }
 
 export interface ServerMessage {
